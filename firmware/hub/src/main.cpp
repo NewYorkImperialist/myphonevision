@@ -35,7 +35,8 @@ static void onRecv(const uint8_t *mac, const uint8_t *data, int len) {
   if (next == tail) return;  // full: drop
   memcpy(ring[head].mac, mac, 6);
   memcpy(&ring[head].pkt, data, sizeof(MpvControllerPacket));
-  head = next;
+  // Release: the slot's bytes must be visible before loop() (other core) sees head move.
+  __atomic_store_n(&head, next, __ATOMIC_RELEASE);
 }
 
 static void writeFrame(const uint8_t *payload, uint8_t len) {
@@ -96,6 +97,7 @@ void setup() {
   Serial.begin(921600);
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
+  esp_wifi_set_ps(WIFI_PS_NONE);
   esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);
   if (esp_now_init() != ESP_OK) {
     while (true) {
@@ -107,9 +109,9 @@ void setup() {
 }
 
 void loop() {
-  while (tail != head) {
+  while (tail != __atomic_load_n(&head, __ATOMIC_ACQUIRE)) {
     Slot &s = ring[tail];
-    if (s.pkt.magic == MPV_MAGIC && s.pkt.type == MPV_PKT_CONTROLLER) {
+    if (s.pkt.magic == MPV_MAGIC && s.pkt.version == MPV_VERSION && s.pkt.type == MPV_PKT_CONTROLLER) {
       learnPeer(s.pkt.hand, s.mac);
       writeFrame(reinterpret_cast<const uint8_t *>(&s.pkt), sizeof(s.pkt));
     }

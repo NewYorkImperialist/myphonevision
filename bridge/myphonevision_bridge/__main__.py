@@ -18,7 +18,7 @@ from . import protocol as P
 from . import quat as Q
 from . import vmt as V
 from .hmd import FixedHmd, SteamVrHmd
-from .pose import MOUNTS, ArmModel, ControllerOrientation
+from .pose import MOUNTS, ArmModel, ControllerOrientation, with_pitch_trim
 
 HOLD_TO_SNAP_S = 1.0
 SYSTEM_TAP_S = 0.05
@@ -136,13 +136,15 @@ def main() -> None:
     ap.add_argument("--vmt-host", default="127.0.0.1")
     ap.add_argument("--no-hmd", action="store_true", help="don't query SteamVR; assume a fixed head")
     ap.add_argument("--mount", choices=sorted(MOUNTS), default="flat-x-forward")
+    ap.add_argument("--pitch-trim", type=float, default=0.0, metavar="DEG",
+                    help="tilt the controller nose-up by this many degrees (fix hand angle in games)")
     ap.add_argument("--debug-follow", action="store_true",
                     help="pin both controllers 0.3 m in front of the head (checks the coordinate space)")
     ap.add_argument("--debug", action="store_true", help="print per-hand status every second")
     args = ap.parse_args()
 
     packets: "queue.Queue[P.ControllerPacket]" = queue.Queue()
-    if args.udp:
+    if args.udp is not None:
         source = UdpSource(args.udp, packets)
         print(f"Listening for UDP controllers on {args.udp}")
     else:
@@ -160,7 +162,8 @@ def main() -> None:
 
     vmt = V.Vmt(args.vmt_host)
     arm = ArmModel()
-    hands = {h: Hand(h, MOUNTS[args.mount]) for h in (P.HAND_LEFT, P.HAND_RIGHT)}
+    mount = with_pitch_trim(MOUNTS[args.mount], args.pitch_trim)
+    hands = {h: Hand(h, mount) for h in (P.HAND_LEFT, P.HAND_RIGHT)}
     start_haptic_listener(V.VMT_OUT_PORT, source.send_haptic)
     next_report = time.monotonic() + 1.0
 

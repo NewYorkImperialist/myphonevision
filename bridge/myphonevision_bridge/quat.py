@@ -71,8 +71,18 @@ def from_axes(x: Vec, y: Vec, z: Vec) -> Quat:
 
 
 def yaw(q: Quat) -> float:
-    """Heading about +Y of the device's forward (-Z) axis, in radians."""
+    """Heading about +Y of the device's forward (-Z) axis, in radians.
+
+    When forward points nearly straight down or up its horizontal part is
+    noise, so the heading comes from the device's up axis instead: pointing at
+    the floor, the top of a held controller faces away from you; pointing at
+    the ceiling, it faces you.
+    """
     f = rotate(q, (0.0, 0.0, -1.0))
+    if abs(f[1]) > 0.9:
+        u = rotate(q, (0.0, 1.0, 0.0))
+        d = u if f[1] < 0 else (-u[0], -u[1], -u[2])
+        return math.atan2(-d[0], -d[2])
     return math.atan2(-f[0], -f[2])
 
 

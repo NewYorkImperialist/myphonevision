@@ -27,8 +27,13 @@ static bool gyroCalibrated = false;
 static uint16_t seq = 0;
 static volatile uint32_t hapticUntilMs = 0;
 static volatile uint8_t hapticAmp = 0;
+static int stickCenter[2] = {2048, 2048};  // measured at power-on
+static bool filterSeeded = false;
+
+#define HAPTIC_MIN_MS 40  // games send ~4 ms pulses; a coin motor needs ~40 ms to spin up
 
 static void startHaptic(uint8_t amp, uint16_t ms) {
+  if (amp > 0 && ms < HAPTIC_MIN_MS) ms = HAPTIC_MIN_MS;
   hapticAmp = amp;
   hapticUntilMs = millis() + ms;
 }
@@ -37,7 +42,9 @@ static void handleIncoming(const uint8_t *data, int len) {
   if (len != sizeof(MpvHapticPacket)) return;
   MpvHapticPacket p;
   memcpy(&p, data, sizeof(p));
-  if (p.magic != MPV_MAGIC || p.type != MPV_PKT_HAPTIC || p.hand != MPV_HAND) return;
+  if (p.magic != MPV_MAGIC || p.version != MPV_VERSION || p.type != MPV_PKT_HAPTIC ||
+      p.hand != MPV_HAND)
+    return;
   startHaptic(p.amplitude, p.duration_ms);
 }
 
@@ -67,6 +74,7 @@ static void setupRadio() {
 #else
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
+  esp_wifi_set_ps(WIFI_PS_NONE);  // no modem sleep: steady 200 Hz and prompt haptics
   esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE);  // hub listens on channel 1
   if (esp_now_init() != ESP_OK) {
     Serial.println("ESP-NOW init failed");
@@ -104,8 +112,9 @@ static void pollIncoming() {
 }
 
 static void calibrateGyro() {
-  Serial.println("Calibrating gyro: keep the controller still");
+  Serial.println("Calibrating gyro: keep the controller still (don't touch the stick)");
   float sum[3] = {0, 0, 0}, g[3], a[3], first[3] = {0, 0, 0};
+  long stickSum[2] = {0, 0};
   int n = 0;
   bool still = true;
   uint32_t start = millis();
@@ -116,6 +125,8 @@ static void calibrateGyro() {
         sum[i] += g[i];
         if (fabsf(g[i] - first[i]) > 0.1f) still = false;  // ~6 deg/s
       }
+      stickSum[0] += analogRead(PIN_STICK_X);
+      stickSum[1] += analogRead(PIN_STICK_Y);
       n++;
     }
     delay(2);
@@ -124,14 +135,28 @@ static void calibrateGyro() {
     for (int i = 0; i < 3; i++) gyroBias[i] = sum[i] / n;
     gyroCalibrated = true;
     Serial.printf("Gyro bias %.4f %.4f %.4f rad/s\n", gyroBias[0], gyroBias[1], gyroBias[2]);
+    for (int i = 0; i < 2; i++) {
+      int c = stickSum[i] / n;
+      // Ignore a center reading far off mid-scale (stick held, or unplugged).
+      if (c > 1200 && c < 2900) stickCenter[i] = c;
+    }
+    Serial.printf("Stick center %d %d\n", stickCenter[0], stickCenter[1]);
   } else {
     Serial.println("Moved during calibration; running uncalibrated (power-cycle to retry)");
   }
-  if (imu.read(g, a)) filter.initFromAccel(a);
+  // Seed tilt from gravity only once: re-seeding on a later recalibration ('c')
+  // would reset yaw and invalidate the bridge's yaw snap.
+  if (!filterSeeded && imu.read(g, a)) {
+    filter.initFromAccel(a);
+    filterSeeded = true;
+  }
 }
 
-static int16_t readStickAxis(int pin, bool invert) {
-  float v = analogRead(pin) / 4095.0f * 2.0f - 1.0f;  // -1..1, center ~0
+static int16_t readStickAxis(int pin, int center, bool invert) {
+  // Scale each side of the measured center separately, so an off-center
+  // resting reading (typical on the ESP32 ADC) still maps to 0.
+  int raw = analogRead(pin);
+  float v = raw < center ? (float)(raw - center) / center : (float)(raw - center) / (4095 - center);
   if (invert) v = -v;
   float mag = fabsf(v);
   if (mag < STICK_DEADZONE) return 0;
@@ -241,8 +266,8 @@ void loop() {
     p.qx = filter.q[1];
     p.qy = filter.q[2];
     p.qz = filter.q[3];
-    p.stick_x = readStickAxis(PIN_STICK_X, STICK_INVERT_X);
-    p.stick_y = readStickAxis(PIN_STICK_Y, STICK_INVERT_Y);
+    p.stick_x = readStickAxis(PIN_STICK_X, stickCenter[0], STICK_INVERT_X);
+    p.stick_y = readStickAxis(PIN_STICK_Y, stickCenter[1], STICK_INVERT_Y);
     p.trigger = readTrigger();
     p.buttons = readButtons();
     send(p);
@@ -250,5 +275,12 @@ void loop() {
 
   pollIncoming();
   pollSerialCommands();
-  analogWrite(PIN_HAPTIC, (int32_t)(hapticUntilMs - millis()) > 0 ? hapticAmp : 0);
+  // analogWrite reconfigures the LEDC timer on every call in core 2.0.x, so
+  // only write when the level changes.
+  static int lastHaptic = -1;
+  int level = (int32_t)(hapticUntilMs - millis()) > 0 ? hapticAmp : 0;
+  if (level != lastHaptic) {
+    analogWrite(PIN_HAPTIC, level);
+    lastHaptic = level;
+  }
 }

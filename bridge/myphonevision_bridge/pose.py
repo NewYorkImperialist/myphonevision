@@ -53,6 +53,15 @@ class ArmModel:
         return Q.add(elbow, Q.rotate(ctrl_rot, (0.0, 0.0, -reach)))
 
 
+def with_pitch_trim(mount: Q.Quat, degrees: float) -> Q.Quat:
+    """Tilt the reported controller nose-up (positive) about its own X axis.
+
+    VMT's Index emulation hands games the Index input profile's grip/tip poses,
+    which are angled relative to the raw pose. If hands look pitched in games,
+    trim it here."""
+    return Q.normalize(Q.mul(mount, Q.axis_angle((1.0, 0.0, 0.0), math.radians(degrees))))
+
+
 @dataclass
 class ControllerOrientation:
     mount: Q.Quat = MOUNTS["flat-x-forward"]

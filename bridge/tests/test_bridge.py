@@ -63,3 +63,22 @@ def test_arm_model_puts_level_controller_in_front_and_to_the_side():
     assert 0.9 < right[1] < 1.4  # around waist-to-chest height
     turned = arm.position(1, head, Q.rot_y(math.pi / 2), Q.rot_y(math.pi / 2))
     assert turned[0] < -0.2  # head and hand turned left: hand now toward -X
+
+
+def test_yaw_snap_works_pointing_at_floor_and_ceiling():
+    o = ControllerOrientation(mount=MOUNTS["flat-x-forward"])
+    for pitch in (-math.pi / 2 + 0.02, math.pi / 2 - 0.02):  # nose down, nose up
+        # Device pointing near-vertically with its top facing heading 0.3 rad.
+        dev = Q.mul(Q.rot_y(0.3), Q.axis_angle((1, 0, 0), pitch))
+        imu = Q.mul(Q.mul(Q.conj(IMU_TO_VR), dev), Q.conj(o.mount))
+        assert abs(Q.yaw(o.raw(imu)) - 0.3) < 1e-6
+        o.snap_yaw(imu, 1.0)
+        assert abs(Q.yaw(o.world(imu)) - 1.0) < 1e-6
+
+
+def test_pitch_trim_raises_the_nose():
+    from myphonevision_bridge.pose import with_pitch_trim
+    o = ControllerOrientation(mount=with_pitch_trim(MOUNTS["flat-x-forward"], 20))
+    level = Q.mul(Q.conj(IMU_TO_VR), Q.conj(MOUNTS["flat-x-forward"]))  # untrimmed: level
+    fwd = Q.rotate(o.raw(level), (0, 0, -1))
+    assert abs(math.degrees(math.asin(fwd[1])) - 20) < 1e-6
