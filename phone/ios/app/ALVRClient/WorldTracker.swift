@@ -42,6 +42,12 @@ final class WorldTracker: NSObject, ARSessionDelegate {
 
         configuration = .init()
         configuration.planeDetection = .horizontal
+        // LiDAR depth for AR passthrough (iPhone Pro models); only when it's used, for heat.
+        let settings = VRSettings.current
+        if settings.passthrough > 0.5, settings.lidarDepth > 0.5,
+           ARWorldTrackingConfiguration.supportsFrameSemantics(.smoothedSceneDepth) {
+            configuration.frameSemantics.insert(.smoothedSceneDepth)
+        }
 
         arSession = ARSession()
 
@@ -93,6 +99,7 @@ final class WorldTracker: NSObject, ARSessionDelegate {
     /// The latest rear-camera image with what's needed to line it up (AR passthrough).
     struct CameraFrame {
         let image: CVPixelBuffer              // YCbCr 4:2:0 biplanar, full range
+        let depth: CVPixelBuffer?             // LiDAR depth, Float32 meters along the camera's view axis, same framing as image
         let intrinsics: simd_float3x3         // in image pixels
         let imageSize: SIMD2<Float>
         let headAtCapture: simd_float4x4      // recentered head pose when it was captured
@@ -162,7 +169,8 @@ final class WorldTracker: NSObject, ARSessionDelegate {
         previous = latest
         latest = (frame.timestamp, headToWorldRecentered)
         let resolution = frame.camera.imageResolution
-        cameraFrame = CameraFrame(image: frame.capturedImage, intrinsics: frame.camera.intrinsics,
+        cameraFrame = CameraFrame(image: frame.capturedImage, depth: frame.smoothedSceneDepth?.depthMap,
+                                  intrinsics: frame.camera.intrinsics,
                                   imageSize: SIMD2(Float(resolution.width), Float(resolution.height)),
                                   headAtCapture: headToWorldRecentered, cameraToHead: cameraToHead)
     }

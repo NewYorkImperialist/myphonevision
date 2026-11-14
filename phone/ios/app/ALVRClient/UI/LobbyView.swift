@@ -22,6 +22,7 @@ struct VRSettings {
     var passthrough: Float = 0         // 1: rear camera behind the frame (AR mode)
     var keyMode: Float = 1             // stream pixels that become see-through: 0 none, 1 near-black, 2 magenta
     var keyTolerance: Float = 0.04     // how close to the key color counts as key (linear RGB)
+    var lidarDepth: Float = 1          // 1: warp the camera per eye with LiDAR depth (stereo), 0: assume 1.5 m
 
     var displayHz: Int { highRefresh > 0.5 ? 120 : 60 }
 
@@ -30,9 +31,9 @@ struct VRSettings {
     static var current = VRSettings.load()
 
     private static let keys = ["k1", "k2", "ipdMm", "screenToLensMm", "lensYOffsetMm", "eyeHeightM", "latencyMs", "reprojection", "highRefresh",
-                               "passthrough", "keyMode", "keyTolerance"]
+                               "passthrough", "keyMode", "keyTolerance", "lidarDepth"]
     private static let paths: [WritableKeyPath<VRSettings, Float>] = [\.k1, \.k2, \.ipdMm, \.screenToLensMm, \.lensYOffsetMm, \.eyeHeightM, \.latencyMs, \.reprojection, \.highRefresh,
-                                                                      \.passthrough, \.keyMode, \.keyTolerance]
+                                                                      \.passthrough, \.keyMode, \.keyTolerance, \.lidarDepth]
 
     static func load() -> VRSettings {
         var s = VRSettings()
@@ -176,6 +177,7 @@ struct LobbyView: View {
 
             Section("AR passthrough") {
                 Toggle("Camera behind the image", isOn: Binding(get: { vr.passthrough > 0.5 }, set: { vr.passthrough = $0 ? 1 : 0 }))
+                Toggle("LiDAR depth (stereo; off: assume 1.5 m)", isOn: Binding(get: { vr.lidarDepth > 0.5 }, set: { vr.lidarDepth = $0 ? 1 : 0 }))
                 Picker("See-through color (stream)", selection: Binding(get: { Int(vr.keyMode) }, set: { vr.keyMode = Float($0) })) {
                     Text("None").tag(0)
                     Text("Black").tag(1)

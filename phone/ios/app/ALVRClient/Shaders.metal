@@ -105,17 +105,39 @@ static bool frameUV(EyeRay e, constant VRFrameUniforms &f, thread float2 &uv) {
 // starts at the eye (6 cm behind the camera, half an IPD to the side) and is
 // assumed to hit something at a fixed depth, which keeps the parallax between
 // eye and camera roughly right for a room-scale scene.
+constexpr sampler nearestSampler(filter::nearest, address::clamp_to_edge);
+
+// A camera-space point to camera image UV. ARKit camera axes are x right, y up,
+// -z forward; image pixels are x right, y down.
+static float2 projectToCamera(float3 p, constant VRCameraUniforms &c) {
+    float2 px = float2(c.intrinsics.x * (p.x / -p.z) + c.intrinsics.z,
+                       c.intrinsics.y * (-p.y / -p.z) + c.intrinsics.w);
+    return px / c.imageSize.xy;
+}
+
+// With LiDAR (c.key.w = 1), the depth along the eye ray is refined against the
+// depth map: guess a distance, read the measured depth where that point lands in
+// the camera image, move the guess to that depth, repeat. Each eye gets its own
+// parallax, so the room is in stereo.
 static float3 cameraColor(EyeRay e, constant VRCameraUniforms &c,
-                          texture2d<float, access::sample> camLuma, texture2d<float, access::sample> camChroma) {
+                          texture2d<float, access::sample> camLuma, texture2d<float, access::sample> camChroma,
+                          texture2d<float, access::sample> camDepth) {
     if (c.imageSize.w < 0.5) return float3(0.0);
     float3 dirCam = (c.headToCamera * float4(normalize(float3(e.tanAngle, -1.0)), 0.0)).xyz;
     float3 eyeCam = c.eyeCenter.xyz + e.eyeSign * c.eyeRight.xyz;
-    float3 p = eyeCam + dirCam * c.imageSize.z;
+    float d = c.imageSize.z;
+    if (c.key.w > 0.5 && dirCam.z < -1e-3) {
+        for (int i = 0; i < 3; i++) {
+            float3 p = eyeCam + dirCam * d;
+            if (p.z > -1e-3) break;
+            float measured = camDepth.sample(nearestSampler, projectToCamera(p, c)).r;   // meters along -z
+            if (measured < 0.05) break;
+            d = clamp((-measured - eyeCam.z) / dirCam.z, 0.1, 10.0);
+        }
+    }
+    float3 p = eyeCam + dirCam * d;
     if (p.z > -1e-3) return float3(0.0);
-    // ARKit camera axes are x right, y up, -z forward; image pixels are x right, y down.
-    float2 px = float2(c.intrinsics.x * (p.x / -p.z) + c.intrinsics.z,
-                       c.intrinsics.y * (-p.y / -p.z) + c.intrinsics.w);
-    float2 uv = px / c.imageSize.xy;
+    float2 uv = projectToCamera(p, c);
     if (any(uv < 0.0) || any(uv > 1.0)) return float3(0.0);
     return yuvToLinear(camLuma.sample(linearSampler, uv).r, camChroma.sample(linearSampler, uv).rg);
 }
@@ -136,11 +158,12 @@ fragment half4 vrStreamYUV(TextureMappingVertex in [[ stage_in ]],
                            texture2d<float, access::sample> lumaTexture [[ texture(0) ]],
                            texture2d<float, access::sample> chromaTexture [[ texture(1) ]],
                            texture2d<float, access::sample> camLuma [[ texture(2) ]],
-                           texture2d<float, access::sample> camChroma [[ texture(3) ]]) {
+                           texture2d<float, access::sample> camChroma [[ texture(3) ]],
+                           texture2d<float, access::sample> camDepth [[ texture(4) ]]) {
     EyeRay e = screenToEye(in.renderedCoordinate.xy, u);
     if (!e.valid) return half4(0.0, 0.0, 0.0, 1.0);
     bool passthrough = c.imageSize.w > 0.5;
-    float3 background = passthrough ? cameraColor(e, c, camLuma, camChroma) : float3(0.0);
+    float3 background = passthrough ? cameraColor(e, c, camLuma, camChroma, camDepth) : float3(0.0);
     float2 uv;
     if (!frameUV(e, f, uv)) return half4(half3(background), 1.0);
     float3 color = yuvToLinear(lumaTexture.sample(linearSampler, uv).r, chromaTexture.sample(linearSampler, uv).rg);
@@ -156,11 +179,12 @@ fragment half4 vrStreamRGB(TextureMappingVertex in [[ stage_in ]],
                            constant VRCameraUniforms &c [[ buffer(2) ]],
                            texture2d<float, access::sample> frameTexture [[ texture(0) ]],
                            texture2d<float, access::sample> camLuma [[ texture(2) ]],
-                           texture2d<float, access::sample> camChroma [[ texture(3) ]]) {
+                           texture2d<float, access::sample> camChroma [[ texture(3) ]],
+                           texture2d<float, access::sample> camDepth [[ texture(4) ]]) {
     EyeRay e = screenToEye(in.renderedCoordinate.xy, u);
     if (!e.valid) return half4(0.0, 0.0, 0.0, 1.0);
     bool passthrough = c.imageSize.w > 0.5;
-    float3 background = passthrough ? cameraColor(e, c, camLuma, camChroma) : float3(0.0);
+    float3 background = passthrough ? cameraColor(e, c, camLuma, camChroma, camDepth) : float3(0.0);
     float2 uv;
     if (!frameUV(e, f, uv)) return half4(half3(background), 1.0);
     float4 frame = frameTexture.sample(linearSampler, uv);

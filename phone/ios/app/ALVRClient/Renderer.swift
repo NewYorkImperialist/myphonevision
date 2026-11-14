@@ -142,6 +142,7 @@ final class Renderer {
         c.key = SIMD4<Float>(s.keyMode, s.keyTolerance, 0.05, 0)
         var luma: MTLTexture = placeholderTexture
         var chroma: MTLTexture = placeholderTexture
+        var depth: MTLTexture = placeholderTexture
         if s.passthrough > 0.5, let cam = EventHandler.shared.latestCameraFrame(),
            let y = makePlaneTexture(cam.image, plane: 0, format: .r8Unorm),
            let cbcr = makePlaneTexture(cam.image, plane: 1, format: .rg8Unorm) {
@@ -155,18 +156,28 @@ final class Renderer {
             c.eyeRight = headInCamera.rotationOnly * SIMD4<Float>(s.ipdMm / 2000, 0, 0, 0)
             luma = CVMetalTextureGetTexture(y)!
             chroma = CVMetalTextureGetTexture(cbcr)!
-            commandBuffer.addCompletedHandler { _ in _ = (y, cbcr) }
+            var depthRef: CVMetalTexture? = nil
+            if s.lidarDepth > 0.5, let depthMap = cam.depth,
+               let d = makePlaneTexture(depthMap, plane: 0, format: .r32Float) {
+                depth = CVMetalTextureGetTexture(d)!
+                depthRef = d
+                c.key.w = 1
+            }
+            commandBuffer.addCompletedHandler { _ in _ = (y, cbcr, depthRef) }
         }
         encoder.setFragmentBytes(&c, length: MemoryLayout<VRCameraUniforms>.stride, index: 2)
         encoder.setFragmentTexture(luma, index: 2)
         encoder.setFragmentTexture(chroma, index: 3)
+        encoder.setFragmentTexture(depth, index: 4)
     }
 
     private func makePlaneTexture(_ buffer: CVPixelBuffer, plane: Int, format: MTLPixelFormat) -> CVMetalTexture? {
         var texture: CVMetalTexture?
+        let planar = CVPixelBufferIsPlanar(buffer)   // the depth map isn't
+        let width = planar ? CVPixelBufferGetWidthOfPlane(buffer, plane) : CVPixelBufferGetWidth(buffer)
+        let height = planar ? CVPixelBufferGetHeightOfPlane(buffer, plane) : CVPixelBufferGetHeight(buffer)
         let status = CVMetalTextureCacheCreateTextureFromImage(
-            nil, metalTextureCache, buffer, nil, format,
-            CVPixelBufferGetWidthOfPlane(buffer, plane), CVPixelBufferGetHeightOfPlane(buffer, plane), plane, &texture)
+            nil, metalTextureCache, buffer, nil, format, width, height, plane, &texture)
         return status == kCVReturnSuccess ? texture : nil
     }
 
