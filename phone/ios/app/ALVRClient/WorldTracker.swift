@@ -57,6 +57,16 @@ final class WorldTracker: NSObject, ARSessionDelegate {
 
     func session(_ session: ARSession, didUpdate frame: ARFrame) {
         updateHeadPose(frame)
+        if let depth = frame.smoothedSceneDepth {
+            depthSmoother.submit(depth: depth.depthMap, confidence: depth.confidenceMap)
+        }
+    }
+
+    private let depthSmoother = DepthSmoother()
+
+    /// Smoothed LiDAR depth for AR passthrough, if the depth setting is on.
+    func smoothedDepth() -> DepthSmoother.Result? {
+        return depthSmoother.latest()
     }
 
     func start() {
@@ -99,7 +109,6 @@ final class WorldTracker: NSObject, ARSessionDelegate {
     /// The latest rear-camera image with what's needed to line it up (AR passthrough).
     struct CameraFrame {
         let image: CVPixelBuffer              // YCbCr 4:2:0 biplanar, full range
-        let depth: CVPixelBuffer?             // LiDAR depth, Float32 meters along the camera's view axis, same framing as image
         let intrinsics: simd_float3x3         // in image pixels
         let imageSize: SIMD2<Float>
         let headAtCapture: simd_float4x4      // recentered head pose when it was captured
@@ -169,9 +178,131 @@ final class WorldTracker: NSObject, ARSessionDelegate {
         previous = latest
         latest = (frame.timestamp, headToWorldRecentered)
         let resolution = frame.camera.imageResolution
-        cameraFrame = CameraFrame(image: frame.capturedImage, depth: frame.smoothedSceneDepth?.depthMap,
+        cameraFrame = CameraFrame(image: frame.capturedImage,
                                   intrinsics: frame.camera.intrinsics,
                                   imageSize: SIMD2(Float(resolution.width), Float(resolution.height)),
                                   headAtCapture: headToWorldRecentered, cameraToHead: cameraToHead)
+    }
+}
+
+/// Turns ARKit's raw LiDAR depth (256 x 192, noisy, with holes and hard edges) into
+/// something stable enough to warp the camera image with:
+/// - a 32 x 24 grid of per-cell medians of confident samples, gaps filled, blurred
+///   and smoothed over time, so the warp bends instead of tearing at edges;
+/// - one scene depth: the median of the central cells, smoothed over time.
+/// Runs on its own queue and skips frames while busy.
+final class DepthSmoother {
+    static let gridW = 32, gridH = 24
+    struct Result {
+        let grid: [Float16]       // gridW x gridH, meters along the camera's view axis, row-major from the image's top
+        let sceneDepth: Float
+        let version: Int
+    }
+    
+    private let queue = DispatchQueue(label: "Depth smoother", qos: .userInitiated)
+    private let lock = NSLock()
+    private var busy = false
+    private var result: Result?
+    private var grid = [Float](repeating: 0, count: gridW * gridH)
+    private var sceneDepth: Float = 1.5
+    private var version = 0
+    
+    func latest() -> Result? {
+        lock.lock()
+        defer { lock.unlock() }
+        return result
+    }
+    
+    func submit(depth: CVPixelBuffer, confidence: CVPixelBuffer?) {
+        lock.lock()
+        if busy { lock.unlock(); return }
+        busy = true
+        lock.unlock()
+        queue.async { [self] in
+            process(depth: depth, confidence: confidence)
+            lock.lock()
+            busy = false
+            lock.unlock()
+        }
+    }
+    
+    private func process(depth: CVPixelBuffer, confidence: CVPixelBuffer?) {
+        let gw = DepthSmoother.gridW, gh = DepthSmoother.gridH
+        CVPixelBufferLockBaseAddress(depth, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(depth, .readOnly) }
+        if let confidence { CVPixelBufferLockBaseAddress(confidence, .readOnly) }
+        defer { if let confidence { CVPixelBufferUnlockBaseAddress(confidence, .readOnly) } }
+        guard let depthBase = CVPixelBufferGetBaseAddress(depth) else { return }
+        let w = CVPixelBufferGetWidth(depth), h = CVPixelBufferGetHeight(depth)
+        let depthRow = CVPixelBufferGetBytesPerRow(depth)
+        let confBase = confidence.flatMap { CVPixelBufferGetBaseAddress($0) }
+        let confRow = confidence.map { CVPixelBufferGetBytesPerRow($0) } ?? 0
+        let cw = w / gw, ch = h / gh
+        
+        // Per-cell median of confident samples (every other pixel is plenty).
+        var cells = [Float](repeating: .nan, count: gw * gh)
+        var samples = [Float]()
+        samples.reserveCapacity(cw * ch)
+        for gy in 0..<gh {
+            for gx in 0..<gw {
+                samples.removeAll(keepingCapacity: true)
+                var y = gy * ch
+                while y < (gy + 1) * ch {
+                    let row = (depthBase + y * depthRow).assumingMemoryBound(to: Float32.self)
+                    let conf = confBase.map { ($0 + y * confRow).assumingMemoryBound(to: UInt8.self) }
+                    var x = gx * cw
+                    while x < (gx + 1) * cw {
+                        let d = row[x]
+                        if d > 0.1, d < 8, (conf?[x] ?? 2) >= 1 { samples.append(d) }   // medium or high confidence
+                        x += 2
+                    }
+                    y += 2
+                }
+                if samples.count >= 4 {
+                    samples.sort()
+                    cells[gy * gw + gx] = samples[samples.count / 2]
+                }
+            }
+        }
+        
+        // Scene depth: median of the valid cells in the middle half of the view.
+        var central = [Float]()
+        for gy in gh / 4..<gh * 3 / 4 {
+            for gx in gw / 4..<gw * 3 / 4 where !cells[gy * gw + gx].isNaN {
+                central.append(cells[gy * gw + gx])
+            }
+        }
+        central.sort()
+        let measuredScene = central.isEmpty ? sceneDepth : central[central.count / 2]
+        
+        // Fill gaps with the scene depth, then blur twice (3 x 3 box).
+        for i in cells.indices where cells[i].isNaN { cells[i] = measuredScene }
+        for _ in 0..<2 {
+            var blurred = cells
+            for gy in 0..<gh {
+                for gx in 0..<gw {
+                    var sum: Float = 0, n: Float = 0
+                    for dy in -1...1 {
+                        for dx in -1...1 {
+                            let x = gx + dx, y = gy + dy
+                            if x >= 0, x < gw, y >= 0, y < gh { sum += cells[y * gw + x]; n += 1 }
+                        }
+                    }
+                    blurred[gy * gw + gx] = sum / n
+                }
+            }
+            cells = blurred
+        }
+        
+        // Smooth over time (60 Hz frames): the grid ~50 ms, the scene depth ~150 ms.
+        let first = version == 0
+        for i in grid.indices { grid[i] = first ? cells[i] : grid[i] + 0.3 * (cells[i] - grid[i]) }
+        sceneDepth = first ? measuredScene : sceneDepth + 0.1 * (measuredScene - sceneDepth)
+        version += 1
+        
+        let packed = grid.map { Float16($0) }
+        lock.lock()
+        result = Result(grid: packed, sceneDepth: sceneDepth, version: version)
+        lock.unlock()
     }
 }

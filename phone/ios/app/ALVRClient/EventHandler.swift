@@ -81,6 +81,10 @@ class EventHandler: ObservableObject {
         return worldTracker?.latestCameraFrame()
     }
 
+    func smoothedDepth() -> DepthSmoother.Result? {
+        return worldTracker?.smoothedDepth()
+    }
+
     /// Head pose predicted to `time` (CACurrentMediaTime clock).
     func headToWorld(at time: Double) -> simd_float4x4? {
         return worldTracker?.headToWorld(at: time)

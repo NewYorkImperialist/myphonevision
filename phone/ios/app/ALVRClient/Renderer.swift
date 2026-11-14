@@ -156,19 +156,44 @@ final class Renderer {
             c.eyeRight = headInCamera.rotationOnly * SIMD4<Float>(s.ipdMm / 2000, 0, 0, 0)
             luma = CVMetalTextureGetTexture(y)!
             chroma = CVMetalTextureGetTexture(cbcr)!
-            var depthRef: CVMetalTexture? = nil
-            if s.lidarDepth > 0.5, let depthMap = cam.depth,
-               let d = makePlaneTexture(depthMap, plane: 0, format: .r32Float) {
-                depth = CVMetalTextureGetTexture(d)!
-                depthRef = d
-                c.key.w = 1
+            // Depth: 0 fixed 1.5 m; 1 LiDAR scene average; 2 LiDAR smoothed grid (per-pixel stereo).
+            if s.lidarDepth > 0.5, let smoothed = EventHandler.shared.smoothedDepth() {
+                c.imageSize.z = smoothed.sceneDepth
+                if s.lidarDepth > 1.5 {
+                    depth = depthGridTexture(smoothed)
+                    c.key.w = 1
+                }
             }
-            commandBuffer.addCompletedHandler { _ in _ = (y, cbcr, depthRef) }
+            commandBuffer.addCompletedHandler { _ in _ = (y, cbcr) }
         }
         encoder.setFragmentBytes(&c, length: MemoryLayout<VRCameraUniforms>.stride, index: 2)
         encoder.setFragmentTexture(luma, index: 2)
         encoder.setFragmentTexture(chroma, index: 3)
         encoder.setFragmentTexture(depth, index: 4)
+    }
+
+    // Three grid textures in rotation, so the CPU never rewrites one a frame in flight reads.
+    private var depthGridTextures: [MTLTexture] = []
+    private var depthGridVersion = -1
+    private var depthGridIndex = 0
+
+    private func depthGridTexture(_ smoothed: DepthSmoother.Result) -> MTLTexture {
+        if depthGridTextures.isEmpty {
+            let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: DepthSmoother.gridW,
+                                                                height: DepthSmoother.gridH, mipmapped: false)
+            desc.usage = .shaderRead
+            depthGridTextures = (0..<3).map { _ in metalDevice.makeTexture(descriptor: desc)! }
+        }
+        if smoothed.version != depthGridVersion {
+            depthGridVersion = smoothed.version
+            depthGridIndex = (depthGridIndex + 1) % depthGridTextures.count
+            smoothed.grid.withUnsafeBytes { bytes in
+                depthGridTextures[depthGridIndex].replace(
+                    region: MTLRegionMake2D(0, 0, DepthSmoother.gridW, DepthSmoother.gridH), mipmapLevel: 0,
+                    withBytes: bytes.baseAddress!, bytesPerRow: DepthSmoother.gridW * MemoryLayout<Float16>.size)
+            }
+        }
+        return depthGridTextures[depthGridIndex]
     }
 
     private func makePlaneTexture(_ buffer: CVPixelBuffer, plane: Int, format: MTLPixelFormat) -> CVMetalTexture? {

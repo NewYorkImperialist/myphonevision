@@ -105,7 +105,6 @@ static bool frameUV(EyeRay e, constant VRFrameUniforms &f, thread float2 &uv) {
 // starts at the eye (6 cm behind the camera, half an IPD to the side) and is
 // assumed to hit something at a fixed depth, which keeps the parallax between
 // eye and camera roughly right for a room-scale scene.
-constexpr sampler nearestSampler(filter::nearest, address::clamp_to_edge);
 
 // A camera-space point to camera image UV. ARKit camera axes are x right, y up,
 // -z forward; image pixels are x right, y down.
@@ -115,10 +114,11 @@ static float2 projectToCamera(float3 p, constant VRCameraUniforms &c) {
     return px / c.imageSize.xy;
 }
 
-// With LiDAR (c.key.w = 1), the depth along the eye ray is refined against the
-// depth map: guess a distance, read the measured depth where that point lands in
-// the camera image, move the guess to that depth, repeat. Each eye gets its own
-// parallax, so the room is in stereo.
+// The assumed depth is c.imageSize.z: 1.5 m, or the LiDAR scene average. With
+// the smoothed LiDAR grid (c.key.w = 1) it's refined along the eye ray: guess a
+// distance, read the grid where that point lands in the camera image, move the
+// guess to that depth, repeat. The grid is smooth, so this converges and the warp
+// bends at edges instead of tearing. Each eye gets its own parallax (stereo).
 static float3 cameraColor(EyeRay e, constant VRCameraUniforms &c,
                           texture2d<float, access::sample> camLuma, texture2d<float, access::sample> camChroma,
                           texture2d<float, access::sample> camDepth) {
@@ -127,10 +127,10 @@ static float3 cameraColor(EyeRay e, constant VRCameraUniforms &c,
     float3 eyeCam = c.eyeCenter.xyz + e.eyeSign * c.eyeRight.xyz;
     float d = c.imageSize.z;
     if (c.key.w > 0.5 && dirCam.z < -1e-3) {
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 4; i++) {
             float3 p = eyeCam + dirCam * d;
             if (p.z > -1e-3) break;
-            float measured = camDepth.sample(nearestSampler, projectToCamera(p, c)).r;   // meters along -z
+            float measured = camDepth.sample(linearSampler, projectToCamera(p, c)).r;   // meters along -z
             if (measured < 0.05) break;
             d = clamp((-measured - eyeCam.z) / dirCam.z, 0.1, 10.0);
         }
