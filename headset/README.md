@@ -7,14 +7,13 @@ A printed shell around harvested lenses, with the Pixel's rear camera bar left u
 In order of preference:
 
 1. **A cheap phone VR viewer** from Walmart, Target or Five Below (Hadley or the Holyoke Mall). One purchase gets lenses, a strap and face foam. Check in-store stock first; many listings are online-only. Buy two if under $20.
-2. **Two identical "5x" magnifiers** from CVS, Walgreens, Staples or a dollar store. "5x" usually means about 62 mm focal length. Many are a 2x lens with a small 5x inset; check the whole lens. 2x and 3x are too weak.
+2. **Two identical "5x" magnifiers** from CVS, Walgreens, Staples or a dollar store. "5x" usually means about 62 mm focal length. Many are a 2x lens with a small 5x inset; check the whole lens. A single 2x or 3x lens is too weak, but two 3x lenses stacked per eye (four identical magnifiers) act like about 5–6x.
 3. Ask in the HackUMass Discord and the organizers for an old Cardboard; try Goodwill.
 4. UMass physics teaching labs (a long shot on a weekend).
 
 ## 2. Measure
 
 **Stacked lenses** (for example two 3x magnifiers per eye): measure the stack as one lens. Hold the lenses together for the focal-length test, and measure the whole stack's thickness. The lens plate thickens automatically to fit, and the `lens_ring` part locks the stack in.
-
 
 - **Focal length:** focus a bright window across the room onto paper. The lens-to-paper distance is `lens_f`.
 - **Diameter and rim thickness:** calipers, giving `lens_d` and `lens_thk`.
