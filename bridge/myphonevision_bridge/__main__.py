@@ -226,15 +226,16 @@ def main() -> None:
                     vmt.button(pkt.hand, idx, bool(b & bit))
             if changed & P.BTN_STICK:
                 vmt.joystick_click(pkt.hand, V.JOYSTICK, bool(b & P.BTN_STICK))
-            vmt.trigger(pkt.hand, V.TRIGGER, pkt.trigger)
-            vmt.trigger(pkt.hand, V.GRIP, 1.0 if b & P.BTN_GRIP else 0.0)
+            # The FSR is the grip (grab), not the trigger; a grip switch, if wired, also counts.
+            grip = max(pkt.trigger, 1.0 if b & P.BTN_GRIP else 0.0)
+            vmt.trigger(pkt.hand, V.GRIP, grip)
             vmt.joystick(pkt.hand, V.JOYSTICK, pkt.stick[0], pkt.stick[1])
             # Edge-triggered touch/click states derived from the analog values.
-            states = (pkt.trigger > 0.05, pkt.trigger > 0.9,
+            states = (grip > 0.05, grip > 0.9,
                       bool(b & P.BTN_STICK) or abs(pkt.stick[0]) + abs(pkt.stick[1]) > 0)
             if states != h.prev_states:
-                vmt.trigger_touch(pkt.hand, V.TRIGGER, states[0])
-                vmt.trigger_click(pkt.hand, V.TRIGGER, states[1])
+                vmt.trigger_touch(pkt.hand, V.GRIP, states[0])
+                vmt.trigger_click(pkt.hand, V.GRIP, states[1])
                 vmt.joystick_touch(pkt.hand, V.JOYSTICK, states[2])
                 h.prev_states = states
 
@@ -281,7 +282,7 @@ def main() -> None:
                 p = h.last
                 print(f"{name}: {h.count:3d} Hz  q=({p.quat[0]:+.2f},{p.quat[1]:+.2f},"
                       f"{p.quat[2]:+.2f},{p.quat[3]:+.2f})  stick=({p.stick[0]:+.2f},{p.stick[1]:+.2f})"
-                      f"  trig={p.trigger:.2f}  buttons={p.buttons:05b}"
+                      f"  grip={p.trigger:.2f}  buttons={p.buttons:05b}"
                       f"{'' if p.gyro_calibrated else '  GYRO UNCALIBRATED'}")
                 h.count = 0
 

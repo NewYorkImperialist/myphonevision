@@ -126,7 +126,7 @@ Both controllers are wired and tested (wireless on batteries: LEFT ~195 Hz, RIGH
 | U.FL antenna | not measured | Clips on; tape it along the inside wall, away from the battery |
 | Joystick, Adafruit 512 | 38.08 square, M3 at 30.5 (measured, issue #7) | **Pin header toward the wrist**: `STICK_INVERT_Y 0` assumes that orientation |
 | **A button only** | 16 mm-class panel mount: thread 14.84, ring 19.19 (issue #7) | GPIO 25. **No B, system or grip buttons.** Click and hold the stick (centered): 1 s = recenter, 3 s = system (bridge) |
-| FSR trigger | pad 18.5, tail 7.3 wide | GPIO 32 + 10 kΩ to GND |
+| FSR **grip** (grab, not trigger) | pad 18.5, tail 7.3 wide | GPIO 32 + 10 kΩ to GND |
 | IMU, LEFT | GY-521 | Flat, chip up |
 | IMU, RIGHT | **Adafruit BNO055**, 25.35 × 20.3 | Flat, chip up, turned the same way as LEFT's GY-521 (one `--mount` serves both hands). Firmware detects it |
 | Vibration motor | not measured | GPIO 23 through the NPN; tape or glue it in |

@@ -42,7 +42,7 @@ Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes co
 5. Then the tracker cases and controller shells. Measure the real parts first ([cases/README.md](cases/README.md)).
 
 ### Third person: parts and bring-up
-**Status (ygrfhf):** both controllers wired and tested, running wirelessly on 4×AA through the hub (LEFT ~195 Hz, RIGHT ~148 Hz). Each has IMU, joystick, A button, FSR trigger (RIGHT's needs replacing), vibration and antenna. LEFT has a GY-521, RIGHT an Adafruit BNO055. Grip, B and system buttons dropped. What goes in the shells, with sizes: [docs/wiring.md](docs/wiring.md) step 2h.
+**Status (ygrfhf):** both controllers wired and tested, running wirelessly on 4×AA through the hub (LEFT ~195 Hz, RIGHT ~148 Hz). Each has IMU, joystick, A button, FSR grip (RIGHT's needs replacing; the bridge sends it as grip, there is no trigger), vibration and antenna. LEFT has a GY-521, RIGHT an Adafruit BNO055. Grip, B and system buttons dropped. What goes in the shells, with sizes: [docs/wiring.md](docs/wiring.md) step 2h.
 1. Check out parts at the hardware desk, P0 first (ESP32 boards, GY-521 / motion sensors). Ask whether you can take Jayden's share (the limit is one of each item per attendee).
 2. Ask the desk: which chip is the "Accelerometer/Gyroscopic Sensor"? Are there 2.4 GHz U.FL antennas? Is the limit per item or per pack?
 3. Measure the lab's 4×AA battery holder, joystick board (and its screw-hole spacing) and push buttons; send the numbers to industrial design.
