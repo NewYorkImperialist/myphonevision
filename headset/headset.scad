@@ -29,8 +29,8 @@ ipd = 63.0;             // lens center spacing
 // ---- Phone: iPhone 16 Pro (check with calipers; add a case's thickness if used)
 phone_w = 149.6;        // long edge
 phone_h = 71.5;         // short edge
-phone_t = 8.25;          // body thickness, not counting the camera bar
-cam_bar_h = 4.35;        // how far the camera bar sticks out past the back (measure)
+phone_t = 8.95;          // body thickness, not counting the camera bump (measured)
+cam_bar_h = 3.65;        // bump past the back: 12.6 total at the bump (fits the printed slice) - phone_t
 screen_w = 144.8;
 screen_h = 66.7;
 cam_from_top = 3;    // phone top edge to the near edge of the camera bar
@@ -247,7 +247,7 @@ module jig_ring() {
 // Two rails along the top and bottom edges of the phone's back plus a
 // crossbar at the USB end, clear of the camera bar and the vents. Modeled in
 // tray coordinates at its installed position.
-spacer_t = cam_bar_h + clear - 0.3;
+spacer_t = cam_bar_h + clear - 0.6;  // 0.6: this printer prints the pocket ~0.27 mm shallow
 spacer_x0 = -in_w / 2 + cam_from_top + cam_bar_len + 1;
 spacer_x1 = in_w / 2 - 0.2;
 rail_w = 9;
