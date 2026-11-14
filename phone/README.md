@@ -41,7 +41,7 @@ python3 tools/cardboard_qr.py --lens-f 62 --lens-d 45 --k1-sweep 0.1 0.2 0.3 0.4
 
 Use the same `lens_f` and `focus_back_off` as `headset/headset.scad`. The images land in `build/qr/`; open one on a laptop screen and scan it from the phone.
 
-**Tuning distortion (k1, k2):** show a grid in SteamVR (or any straight lines) and scan each code in the sweep. Keep the one where straight lines look straightest: k1 too low makes lines bow outward toward the edges, too high makes them pinch inward. Defaults start from Google's Cardboard v2 values (k1 0.24, k2 0.30). `--decode URL` prints what's inside any viewer code.
+**Tuning distortion (k1, k2):** show a grid in SteamVR (or any straight lines) and scan each code in the sweep. Keep the one where straight lines look straightest near the edges of the view. If lines bend one way at the lowest k1 and the other way at the highest, the right value is in between; sweep more finely around it. Defaults start from Google's Cardboard v2 values (k1 0.24, k2 0.30). `--decode URL` prints what's inside any viewer code.
 
 ## Thermals
 
