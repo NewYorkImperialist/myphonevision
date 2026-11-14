@@ -28,10 +28,10 @@ part = "assembly";
 // Stacked lenses (e.g. two 3x magnifiers per eye): measure the stack as one
 // lens. lens_thk = the whole stack's thickness; lens_f = the stack's focal length.
 // Defaults: two Carson TriView TV-26 magnifiers, all three lenses stacked per
-// eye, cut off the swivel (Jayden, 2026-11-14). Rough hand measurements; the
-// focus tubes cover the error.
-lens_d = 38.0;          // lens diameter, calipers (here: the plastic ring's outside)
-lens_thk = 21.1;        // lens (or stack) thickness at the rim
+// eye, cut off the swivel (Jayden, 2026-11-14). Ring and stack measured with
+// calipers (Nafis); the focal length is an estimate the focus tubes cover.
+lens_d = 38.75;         // lens diameter, calipers (here: the plastic ring's outside), measured
+lens_thk = 21.09;       // lens (or stack) thickness at the rim, measured
 lens_f = 33.0;          // focal length (here: phone ~20 mm behind the back glass, plus half the stack)
 focus_back_off = 2.5;   // sit the screen this much inside the focal length
 ipd = 63.0;             // lens center spacing
@@ -59,14 +59,20 @@ ring_t = 1.6;           // lens retaining ring thickness
 // focus pulled out by tube_in, and pulls out further for longer focus. Lets each
 // wearer (and each eye) focus, e.g. a nearsighted judge without glasses.
 focus_tubes = true;
-tube_wall = 1.6;
 tube_fit = 0.3;         // bore minus tube diameter; print tube_fit first, tape the tube if loose
 tube_in = 6.0;          // travel toward the phone from nominal (push in)
 tube_id = lens_d + 0.3;
-tube_od = tube_id + 2 * tube_wall;
+// The front was first printed for 38 mm rings: a 41.5 mm tube in a 41.8 bore with
+// a stop down to 38.3. The measured 38.75 rings keep that front: same tube outside,
+// thinner wall (1.225, three 0.4 mm lines). Only the tubes and lens rings change.
+tube_od = 41.5;
+tube_wall = (tube_od - tube_id) / 2;
+stop_id = 38.3;         // the stop's inner edge and the plate's aperture, as printed
 tube_len = lens_lip + lens_thk + ring_t;
 bore_d = tube_od + tube_fit;
-stop_h = (bore_d - tube_id) / 2;   // 45-degree stop at the phone end of the bore: prints without support
+stop_h = (bore_d - stop_id) / 2;   // 45-degree stop at the phone end of the bore: prints without support
+assert(tube_wall >= 1.2, str("tube wall ", tube_wall, " mm is too thin to print: rings over ", tube_od - 2.7,
+                             " mm need a new front (raise tube_od)"));
 plate_t = focus_tubes ? tube_len + stop_h + 0.5
                       : max(4.0, lens_lip + lens_thk + ring_t);  // grows to fit a lens stack
 lip = 2.0;              // tray lip that holds the phone's screen edge
@@ -167,8 +173,8 @@ module lens_plate() {
     for (p = lens_pos) translate([p[0], p[1], 0]) {
       if (focus_tubes) {
         translate([0, 0, -1]) cylinder(d = bore_d, h = tube_len + 1);        // tube bore
-        translate([0, 0, tube_len - 0.01]) cylinder(d1 = bore_d, d2 = tube_id, h = stop_h + 0.02);  // stop
-        translate([0, 0, -1]) cylinder(d = tube_id, h = plate_t + 2);        // aperture
+        translate([0, 0, tube_len - 0.01]) cylinder(d1 = bore_d, d2 = stop_id, h = stop_h + 0.02);  // stop
+        translate([0, 0, -1]) cylinder(d = stop_id, h = plate_t + 2);        // aperture
       } else {
         translate([0, 0, -1]) cylinder(d = lens_d - 2 * 1.2, h = plate_t + 2);  // aperture
         translate([0, 0, lens_lip]) cylinder(d = lens_d + 0.3, h = plate_t);   // seat
