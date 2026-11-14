@@ -15,12 +15,16 @@ struct VRSettings {
     var ipdMm: Float = 63
     var screenToLensMm: Float = 42.5   // lens_f - focus_back_off (45 - 2.5 until the lenses are measured)
     var lensYOffsetMm: Float = 0       // lens centers above (+) or below (-) the screen center
+    var eyeHeightM: Float = 1.65       // head height above the floor after a recenter
+    var latencyMs: Float = 0           // test mode only: render the room this late, like the stream
+    var reprojection: Float = 1        // 1 on, 0 off
 
-    static let screenWidthMm: Float = 144.8   // iPhone 16 Pro: 2622 px at 460 ppi
+    static let screenWidthMm: Float = 144.8   // iPhone 16 Pro: 2622 x 1206 px at 460 ppi
+    static let screenHeightMm: Float = 66.6
     static var current = VRSettings.load()
 
-    private static let keys = ["k1", "k2", "ipdMm", "screenToLensMm", "lensYOffsetMm"]
-    private static let paths: [WritableKeyPath<VRSettings, Float>] = [\.k1, \.k2, \.ipdMm, \.screenToLensMm, \.lensYOffsetMm]
+    private static let keys = ["k1", "k2", "ipdMm", "screenToLensMm", "lensYOffsetMm", "eyeHeightM", "latencyMs", "reprojection"]
+    private static let paths: [WritableKeyPath<VRSettings, Float>] = [\.k1, \.k2, \.ipdMm, \.screenToLensMm, \.lensYOffsetMm, \.eyeHeightM, \.latencyMs, \.reprojection]
 
     static func load() -> VRSettings {
         var s = VRSettings()
@@ -35,6 +39,22 @@ struct VRSettings {
             UserDefaults.standard.set(self[keyPath: path], forKey: "vr." + key)
         }
         VRSettings.current = self
+    }
+
+    /// Per eye (left, right): tangents of the left, right, up and down edges of what
+    /// the eye sees through its lens, with the same lens model as the shader (left
+    /// and down negative). ALVR renders each eye with this FOV.
+    func eyeFovTangents() -> [SIMD4<Float>] {
+        func seen(_ d: Float) -> Float {
+            let r2 = d * d
+            return max(-2.5, min(2.5, d * (1 + k1 * r2 + k2 * r2 * r2)))
+        }
+        let halfW = VRSettings.screenWidthMm / 2, halfH = VRSettings.screenHeightMm / 2
+        let up = seen((halfH - lensYOffsetMm) / screenToLensMm)
+        let down = seen((-halfH - lensYOffsetMm) / screenToLensMm)
+        let outer = seen((halfW - ipdMm / 2) / screenToLensMm)
+        let inner = seen((ipdMm / 2) / screenToLensMm)
+        return [SIMD4(-outer, inner, up, down), SIMD4(-inner, outer, up, down)]
     }
 }
 
@@ -137,6 +157,12 @@ struct LobbyView: View {
                 SettingSlider(title: "IPD (mm)", value: $vr.ipdMm, range: 54...74, step: 0.5, format: "%.1f")
                 SettingSlider(title: "Lens height offset (mm)", value: $vr.lensYOffsetMm, range: -10...10, step: 0.5, format: "%.1f")
                 Button("Reset to defaults") { vr = VRSettings() }
+            }
+
+            Section("Head") {
+                SettingSlider(title: "Eye height (m)", value: $vr.eyeHeightM, range: 1.0...2.0, step: 0.05, format: "%.2f")
+                Toggle("Reprojection", isOn: Binding(get: { vr.reprojection > 0.5 }, set: { vr.reprojection = $0 ? 1 : 0 }))
+                SettingSlider(title: "Test mode: simulated latency (ms)", value: $vr.latencyMs, range: 0...200, step: 10, format: "%.0f")
             }
             
             Section("Server") {

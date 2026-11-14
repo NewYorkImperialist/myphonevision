@@ -73,15 +73,10 @@ struct MetalView: UIViewRepresentable {
             if renderer.testMode {
                 renderer.drawTestScene(drawable: drawable, renderPassDescriptor: renderPassDescriptor)
             } else if EventHandler.shared.alvrInitialized {
+                // Tracking goes out every display refresh, not only when video arrives.
+                EventHandler.shared.sendTracking()
                 renderer.draw(drawable: drawable, renderPassDescriptor: renderPassDescriptor)
             }
-            
-            // Exec in separated thread
-            let thread = Thread {// [weak self] in
-                EventHandler.shared.pollEvents()
-            }
-            thread.name = "Poll Events Thread"
-            thread.start()
         }
         
     }

@@ -57,4 +57,11 @@ typedef struct
     vector_float4 misc;           // time s, unused, unused, unused
 } VRUniforms;
 
+// The frame being shown (an ALVR video frame, or test mode's rendered eyes).
+typedef struct
+{
+    matrix_float4x4 reproject;    // rotation: display-time head -> the head the frame was rendered for
+    vector_float4 fovTan[2];      // per eye: tan of left, right, up, down edges (left, down negative)
+} VRFrameUniforms;
+
 #endif /* ShaderTypes_h */

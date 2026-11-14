@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import simd
 
 class EventHandler: ObservableObject {
     enum ConnectionState {
@@ -22,6 +23,7 @@ class EventHandler: ObservableObject {
     
     var alvrInitialized = false
     var streamingActive = false
+    private var pollingStarted = false
     private var lastBatteryStateUpdateTime: Int64 = 0
     private var worldTracker: WorldTracker? = nil
     private var alvrEvent: AlvrEvent = AlvrEvent()
@@ -30,6 +32,7 @@ class EventHandler: ObservableObject {
     
     /// Initialize alvr client but don't allow connecting
     func initialize(size: CGSize) {
+        if pollingStarted { return }   // the drawable can resize; ALVR is set up once
         let refreshRates: [Float] = [60]
         let width = UInt32(size.width)
         let oneViewWidth = (width / 2)
@@ -47,6 +50,10 @@ class EventHandler: ObservableObject {
         refreshRates.withUnsafeBufferPointer { rates in
             capabilities.refresh_rates = rates.baseAddress
             alvr_initialize(capabilities)
+        }
+        if !pollingStarted {
+            pollingStarted = true
+            startPollingThread()
         }
         
         print("ALVR initialized.")
@@ -151,33 +158,7 @@ class EventHandler: ObservableObject {
                 // print("frame ready")
                 if connectionState == .connected {
                     delegate?.updateFrame()
-                    
-                    if let worldTracker = worldTracker {
-                        // YOLO?
-                        // Send new tracking
-                        let pose = AlvrPose(orientation: worldTracker.getQuaterionRotation(), position: worldTracker.getPosition())
-                        var trackingMotion = AlvrDeviceMotion(device_id: MetalView.Coordinator.deviceIdHead, pose: pose, linear_velocity: (0, 0, 0), angular_velocity: (0, 0, 0))
-                        let timestamp = mach_absolute_time()
-                        //print("sending tracking for timestamp \(timestamp)")
-                        
-                        let v: Float = 1.0
-                        let v2: Float = 1.0
-                        let leftAngles = atan(simd_float4(v, v, v, v))
-                        let rightAngles = atan(simd_float4(v2, v2, v2, v2))
-                        let leftFov = AlvrFov(left: -leftAngles.x, right: leftAngles.y, up: leftAngles.z, down: -leftAngles.w)
-                        let rightFov = AlvrFov(left: -rightAngles.x, right: rightAngles.y, up: rightAngles.z, down: -rightAngles.w)
-                        let leftPose = pose
-                        var rightPose = pose
-                        rightPose.position.0 += 0.063 // HAX: each eyes can't have same positions
-                        let viewFovsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
-                                viewFovsPtr[0] = AlvrViewParams(pose: leftPose, fov: rightFov)
-                                viewFovsPtr[1] = AlvrViewParams(pose: rightPose, fov: rightFov)
-//                        let ipd = Float(0.063)
-                        
-                        var viewParams = AlvrViewParams(pose: pose, fov: leftFov)
-                        alvr_send_tracking(timestamp, UnsafePointer(viewFovsPtr), &trackingMotion, 1, nil, nil)
-                    }
-                    
+
                     // Send battery state every 30 secs
                     if Int64.getCurrentMillis() - lastBatteryStateUpdateTime > 1000 * 30 {
                         lastBatteryStateUpdateTime = Int64.getCurrentMillis()
@@ -190,7 +171,42 @@ class EventHandler: ObservableObject {
                 print("what")
             }
         } else {
-            usleep(10000)
+            usleep(1000)
         }
+    }
+
+    /// One thread that keeps draining ALVR events (started once).
+    func startPollingThread() {
+        let thread = Thread { while true { EventHandler.shared.pollEvents() } }
+        thread.name = "ALVR events"
+        thread.qualityOfService = .userInteractive
+        thread.start()
+    }
+
+    /// Send the head pose to ALVR as two eye views. Call once per display refresh
+    /// while streaming. ALVR derives the head itself (left eye's orientation at the
+    /// midpoint of the eyes), and resends the FOV whenever the eye distance changes.
+    func sendTracking() {
+        guard alvrInitialized, let head = worldTracker?.headToWorld() else { return }
+        let settings = VRSettings.current
+        let fovs = settings.eyeFovTangents()
+        let q = simd_quatf(head.rotation3x3)
+        let orientation = AlvrQuat(x: q.imag.x, y: q.imag.y, z: q.imag.z, w: q.real)
+        let halfIpd = settings.ipdMm / 2000
+
+        func view(_ side: Float, _ fov: SIMD4<Float>) -> AlvrViewParams {
+            let p = head.translation + side * halfIpd * head.rightAxis
+            return AlvrViewParams(pose: AlvrPose(orientation: orientation, position: (p.x, p.y, p.z)),
+                                  fov: AlvrFov(left: atan(fov.x), right: atan(fov.y), up: atan(fov.z), down: atan(fov.w)))
+        }
+        let views = [view(-1, fovs[0]), view(1, fovs[1])]
+
+        // Ask for a frame predicted for when it will be on screen.
+        let targetNs = Clock.nowNs() &+ alvr_get_head_prediction_offset_ns()
+        var noMotions = AlvrDeviceMotion()
+        views.withUnsafeBufferPointer { viewsPtr in
+            alvr_send_tracking(targetNs, viewsPtr.baseAddress, &noMotions, 0, nil, nil)
+        }
+        Renderer.shared?.lastRequestedTimestamp = targetNs
     }
 }

@@ -81,10 +81,11 @@ final class Renderer {
                 queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
                 objc_sync_exit(frameQueueLock)
                 if queuedFrame != nil {
+                    lastQueuedFrame = queuedFrame
                     break
                 }
-                
-                // Recycle old frame with old timestamp/anchor (visionOS doesn't do timewarp for us?)
+
+                // No new frame: show the last one again; reprojection turns it to the current head.
                 if lastQueuedFrame != nil {
                     queuedFrame = lastQueuedFrame
                     break
@@ -112,9 +113,8 @@ final class Renderer {
             let semaphore = inFlightSemaphore
             commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
                 if queuedFrame != nil && self.lastSubmittedTimestamp != queuedFrame?.timestamp {
-                    let currentTimeNs = UInt64(CACurrentMediaTime() * Double(NSEC_PER_SEC))
-                    // print("Finished:", queuedFrame!.timestamp)
-                    alvr_report_submit(queuedFrame!.timestamp, vsyncTimeNs &- currentTimeNs)
+                    // vsync_queue_ns: time from submit to display, about one refresh.
+                    alvr_report_submit(queuedFrame!.timestamp, vsyncTimeNs)
                     self.lastSubmittedTimestamp = queuedFrame!.timestamp
                 }
                 semaphore.signal()
@@ -127,40 +127,93 @@ final class Renderer {
         }
     }
     
-    // ---- Test mode: the lens pass over a built-in room, no server needed ----
+    // ---- Test mode: no server needed ----
+    // Renders the room into a side-by-side eye texture at a (optionally delayed) pose,
+    // the way the PC renders a stream frame, then shows it through the same lens pass
+    // and reprojection as the stream.
     var testMode = false
-    private var testScenePipelineState: MTLRenderPipelineState?
+    private var testEyesPipelineState: MTLRenderPipelineState?
+    private var frameRGBPipelineState: MTLRenderPipelineState?
+    private var testEyesTexture: MTLTexture?
+    private var poseHistory: [(time: Double, head: simd_float4x4)] = []
 
     func drawTestScene(drawable: CAMetalDrawable, renderPassDescriptor: MTLRenderPassDescriptor) {
-        if testScenePipelineState == nil {
-            testScenePipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrTestScene")
+        if testEyesPipelineState == nil {
+            testEyesPipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrTestEyes")
+            frameRGBPipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrStreamRGB")
+            let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: globalPixelFormat, width: 2048, height: 1024, mipmapped: false)
+            desc.usage = [.renderTarget, .shaderRead]
+            desc.storageMode = .private
+            testEyesTexture = metalDevice.makeTexture(descriptor: desc)
         }
-        guard let commandBuffer = metalCommandQueue.makeCommandBuffer(),
-              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else { return }
-        var uniforms = Renderer.makeVRUniforms(drawable: drawable)
-        encoder.label = "Test scene"
-        encoder.setRenderPipelineState(testScenePipelineState!)
-        encoder.setFragmentBytes(&uniforms, length: MemoryLayout<VRUniforms>.stride, index: 0)
-        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
-        encoder.endEncoding()
+        guard let commandBuffer = metalCommandQueue.makeCommandBuffer() else { return }
+
+        let settings = VRSettings.current
+        let now = CACurrentMediaTime()
+        let displayHead = EventHandler.shared.headToWorld() ?? matrix_identity_float4x4
+        poseHistory.append((now, displayHead))
+        poseHistory.removeAll { $0.time < now - 0.5 }
+        let renderTime = now - Double(settings.latencyMs) / 1000
+        let renderedHead = poseHistory.last(where: { $0.time <= renderTime })?.head ?? poseHistory[0].head
+
+        var displayUniforms = Renderer.makeVRUniforms(drawable: drawable, head: displayHead)
+        var renderUniforms = displayUniforms
+        renderUniforms.headToWorld = renderedHead
+        var frameUniforms = Renderer.makeFrameUniforms(renderedHead: renderedHead, displayHead: displayHead,
+                                                       fovTan: settings.eyeFovTangents())
+
+        // Pass 1: "the PC" renders both eyes at the delayed pose.
+        let eyesPass = MTLRenderPassDescriptor()
+        eyesPass.colorAttachments[0].texture = testEyesTexture
+        eyesPass.colorAttachments[0].loadAction = .dontCare
+        eyesPass.colorAttachments[0].storeAction = .store
+        if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: eyesPass) {
+            encoder.label = "Test eyes"
+            encoder.setRenderPipelineState(testEyesPipelineState!)
+            encoder.setFragmentBytes(&renderUniforms, length: MemoryLayout<VRUniforms>.stride, index: 0)
+            encoder.setFragmentBytes(&frameUniforms, length: MemoryLayout<VRFrameUniforms>.stride, index: 1)
+            encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
+            encoder.endEncoding()
+        }
+        // Pass 2: the phone shows it through the lenses, reprojected to the current head.
+        if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) {
+            encoder.label = "Lens pass (test)"
+            encoder.setRenderPipelineState(frameRGBPipelineState!)
+            encoder.setFragmentBytes(&displayUniforms, length: MemoryLayout<VRUniforms>.stride, index: 0)
+            encoder.setFragmentBytes(&frameUniforms, length: MemoryLayout<VRFrameUniforms>.stride, index: 1)
+            encoder.setFragmentTexture(testEyesTexture, index: 0)
+            encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
+            encoder.endEncoding()
+        }
         commandBuffer.present(drawable)
         commandBuffer.commit()
     }
 
-    static func makeVRUniforms(drawable: CAMetalDrawable) -> VRUniforms {
+    static func makeVRUniforms(drawable: CAMetalDrawable, head: simd_float4x4) -> VRUniforms {
         let s = VRSettings.current
         let w = Float(drawable.texture.width)
         let h = Float(drawable.texture.height)
         return VRUniforms(
-            headToWorld: EventHandler.shared.headToWorld() ?? matrix_identity_float4x4,
+            headToWorld: head,
             lens: SIMD4<Float>(s.k1, s.k2, s.screenToLensMm, s.ipdMm),
             screen: SIMD4<Float>(w, h, VRSettings.screenWidthMm / max(w, h), s.lensYOffsetMm),
             misc: SIMD4<Float>(Float(CACurrentMediaTime().truncatingRemainder(dividingBy: 1000)), 0, 0, 0))
     }
 
+    /// Reprojection rotates each eye ray from the display-time head into the head the
+    /// frame was rendered for (rotation only). Off, or with no rendered pose, it's identity.
+    static func makeFrameUniforms(renderedHead: simd_float4x4?, displayHead: simd_float4x4,
+                                  fovTan: [SIMD4<Float>]) -> VRFrameUniforms {
+        var reproject = matrix_identity_float4x4
+        if VRSettings.current.reprojection > 0.5, let rendered = renderedHead {
+            reproject = simd_transpose(rendered.rotationOnly) * displayHead.rotationOnly
+        }
+        return VRFrameUniforms(reproject: reproject, fovTan: (fovTan[0], fovTan[1]))
+    }
+
     func updateStreamingState(isStarted: Bool) {
         if isStarted {
-            videoFramePipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice)
+            videoFramePipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrStreamYUV")
             framesSinceLastIDR = 0
             framesSinceLastDecode = 0
             
@@ -487,9 +540,24 @@ final class Renderer {
             fatalError("Failed to create render encoder")
         }
         
-        renderEncoder.label = "Primary Render Encoder"
-        renderEncoder.pushDebugGroup("Draw Box")
+        renderEncoder.label = "Lens pass (stream)"
         renderEncoder.setRenderPipelineState(videoFramePipelineState)
+
+        // The frame comes back with the eye poses and FOVs it was rendered for (what
+        // sendTracking sent for its timestamp). Fall back to our own FOV if they're unset.
+        let displayHead = EventHandler.shared.headToWorld() ?? matrix_identity_float4x4
+        let views = queuedFrame.viewParams
+        let o = views[0].pose.orientation
+        let renderedQuat = simd_quatf(ix: o.x, iy: o.y, iz: o.z, r: o.w)
+        let renderedHead: simd_float4x4? = simd_length(renderedQuat.vector) > 0.5 ? simd_float4x4(simd_normalize(renderedQuat)) : nil
+        var fovTan = views.map { SIMD4<Float>(tan($0.fov.left), tan($0.fov.right), tan($0.fov.up), tan($0.fov.down)) }
+        if fovTan.contains(where: { !($0.y > $0.x && $0.z > $0.w) }) {
+            fovTan = VRSettings.current.eyeFovTangents()
+        }
+        var displayUniforms = Renderer.makeVRUniforms(drawable: drawable, head: displayHead)
+        var frameUniforms = Renderer.makeFrameUniforms(renderedHead: renderedHead, displayHead: displayHead, fovTan: fovTan)
+        renderEncoder.setFragmentBytes(&displayUniforms, length: MemoryLayout<VRUniforms>.stride, index: 0)
+        renderEncoder.setFragmentBytes(&frameUniforms, length: MemoryLayout<VRFrameUniforms>.stride, index: 1)
         
         let pixelBuffer = queuedFrame.imageBuffer
         
@@ -518,7 +586,6 @@ final class Renderer {
         }
         
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
-        renderEncoder.popDebugGroup()
         renderEncoder.endEncoding()
     }
     
