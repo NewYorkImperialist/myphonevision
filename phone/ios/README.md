@@ -1,6 +1,6 @@
 # iPhone client (iPhone 16 Pro)
 
-The headset phone runs our own ALVR client. It receives SteamVR video from ALVR on the Windows laptop, shows it through the lenses, and sends 6DoF head pose back from ARKit. To SteamVR it's just an HMD, so everything that runs on SteamVR runs on it. Owner: Nafis (Nofees4Novembah). Discussion: issue #3. The Pixel 7 path ([../README.md](../README.md)) stays ready as the fallback until the team's go/no-go time.
+The headset phone runs our own ALVR client. It receives SteamVR video from ALVR on the Windows laptop, shows it through the lenses, and sends 6DoF head pose back from ARKit. To SteamVR it's just an HMD, so everything that runs on SteamVR runs on it. Owner: TSVRN9 (needs a Mac with Xcode). Discussion: issue #3. The Pixel 7 path ([../README.md](../README.md)) stays ready as the fallback until the team's go/no-go time.
 
 Target phone: iPhone 16 Pro, 6.3" OLED, 2622×1206 at 460 ppi, 120 Hz. It sits landscape in the headset tray, screen toward the lenses.
 
