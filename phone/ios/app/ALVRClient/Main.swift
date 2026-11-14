@@ -14,6 +14,12 @@ struct Main: App {
     var body: some Scene {
         WindowGroup {
             MetalView()
+                // Tap: recenter. Hold 1 s: back to the lobby (and out of test mode).
+                .onTapGesture { EventHandler.shared.recenter() }
+                .onLongPressGesture(minimumDuration: 1) {
+                    Renderer.shared?.testMode = false
+                    isLobbyPresented = true
+                }
                 .fullScreenCover(isPresented: $isLobbyPresented, content: {
                     LobbyView(isPresentedLobby: $isLobbyPresented)
                         .background(.windowBackground)

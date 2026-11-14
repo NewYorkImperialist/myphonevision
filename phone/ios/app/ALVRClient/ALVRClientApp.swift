@@ -70,7 +70,9 @@ struct MetalView: UIViewRepresentable {
                 return
             }
             
-            if EventHandler.shared.alvrInitialized {
+            if renderer.testMode {
+                renderer.drawTestScene(drawable: drawable, renderPassDescriptor: renderPassDescriptor)
+            } else if EventHandler.shared.alvrInitialized {
                 renderer.draw(drawable: drawable, renderPassDescriptor: renderPassDescriptor)
             }
             

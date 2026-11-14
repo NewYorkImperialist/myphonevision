@@ -64,6 +64,15 @@ class EventHandler: ObservableObject {
         worldTracker = .init(isTrackOrientation: isTrackOrientation, isTrackPosition: isTrackPosition)
         worldTracker?.start()
     }
+
+    /// Recentered head pose from ARKit, or nil before tracking starts.
+    func headToWorld() -> simd_float4x4? {
+        return worldTracker?.headToWorld()
+    }
+
+    func recenter() {
+        worldTracker?.recenter()
+    }
     
     private func parseMessage(_ message: String) {
         let lines = message.components(separatedBy: "\n")

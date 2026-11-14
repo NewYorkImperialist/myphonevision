@@ -127,6 +127,37 @@ final class Renderer {
         }
     }
     
+    // ---- Test mode: the lens pass over a built-in room, no server needed ----
+    var testMode = false
+    private var testScenePipelineState: MTLRenderPipelineState?
+
+    func drawTestScene(drawable: CAMetalDrawable, renderPassDescriptor: MTLRenderPassDescriptor) {
+        if testScenePipelineState == nil {
+            testScenePipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrTestScene")
+        }
+        guard let commandBuffer = metalCommandQueue.makeCommandBuffer(),
+              let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) else { return }
+        var uniforms = Renderer.makeVRUniforms(drawable: drawable)
+        encoder.label = "Test scene"
+        encoder.setRenderPipelineState(testScenePipelineState!)
+        encoder.setFragmentBytes(&uniforms, length: MemoryLayout<VRUniforms>.stride, index: 0)
+        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
+        encoder.endEncoding()
+        commandBuffer.present(drawable)
+        commandBuffer.commit()
+    }
+
+    static func makeVRUniforms(drawable: CAMetalDrawable) -> VRUniforms {
+        let s = VRSettings.current
+        let w = Float(drawable.texture.width)
+        let h = Float(drawable.texture.height)
+        return VRUniforms(
+            headToWorld: EventHandler.shared.headToWorld() ?? matrix_identity_float4x4,
+            lens: SIMD4<Float>(s.k1, s.k2, s.screenToLensMm, s.ipdMm),
+            screen: SIMD4<Float>(w, h, VRSettings.screenWidthMm / max(w, h), s.lensYOffsetMm),
+            misc: SIMD4<Float>(Float(CACurrentMediaTime().truncatingRemainder(dividingBy: 1000)), 0, 0, 0))
+    }
+
     func updateStreamingState(isStarted: Bool) {
         if isStarted {
             videoFramePipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice)
@@ -492,11 +523,11 @@ final class Renderer {
     }
     
     /// Build a render state pipeline object
-    private class func buildRenderPipelineWithDevice(device: MTLDevice) throws -> MTLRenderPipelineState {
+    private class func buildRenderPipelineWithDevice(device: MTLDevice, fragment: String = "displayTexture") throws -> MTLRenderPipelineState {
         let library = device.makeDefaultLibrary()
 
         let vertexFunction = library?.makeFunction(name: "mapTexture")
-        let fragmentFunction = library?.makeFunction(name: "displayTexture")
+        let fragmentFunction = library?.makeFunction(name: fragment)
 
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.label = "RenderPipeline"

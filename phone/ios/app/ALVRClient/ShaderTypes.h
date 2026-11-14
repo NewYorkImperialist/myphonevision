@@ -48,4 +48,13 @@ typedef struct
     Uniforms uniforms[2];
 } UniformsArray;
 
+// Lens pass inputs (Renderer.swift fills it, Shaders.metal reads it).
+typedef struct
+{
+    matrix_float4x4 headToWorld;  // head pose between the eyes, meters, recentered
+    vector_float4 lens;           // k1, k2, screen-to-lens mm, IPD mm
+    vector_float4 screen;         // drawable width px, height px, mm per px, lens center y offset mm
+    vector_float4 misc;           // time s, unused, unused, unused
+} VRUniforms;
+
 #endif /* ShaderTypes_h */
