@@ -23,7 +23,7 @@ Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes co
 | Logitech webcam | Camera body-tracking fallback |
 | 2 Grove 3-axis digital accelerometers (±1.5 g, MMA7660) | Useless for tracking (tilt only, no gyro): return them |
 
-**Still needed:** 2 vibration motors, 2 battery holders + AA cells (or the Anker pack). **Body tracking is short:** SlimeVR needs 3 more ESP32 boards and 5–6 gyro IMUs. Unless teammates can still check out DevKitCs, plan on webcam body tracking.
+**Still needed:** 5 more push buttons (each controller needs A, B, system, grip; 8 total), 2 vibration motors, 2 battery holders + AA cells (or the Anker pack). **Body tracking is short:** SlimeVR needs 3 more ESP32 boards and 5–6 gyro IMUs. Unless teammates can still check out DevKitCs, plan on webcam body tracking.
 
 ### Pixel owner: phone and streaming
 1. Confirm the Windows laptop's GPU is NVIDIA, AMD or Intel (hardware video encoder). If not, stop and re-plan (docs/plan.md, gate 1).
