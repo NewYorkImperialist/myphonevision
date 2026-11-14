@@ -25,9 +25,9 @@ joy_housing = 19.96;          // measured: width of the stick's housing on the b
 joy_knob_d = 26;              // measured: knob's outer diameter; it sits just above the top face
 joy_post = [30.5, 30.5];      // mounting-hole spacing, center to center: measured 27.4 inner gap + 3.16 hole
 joy_post_bore = 2.8;          // M3 screws thread into the printed posts
-joy_depth = 16.9;             // head's outer top face down to the board's top surface: 14.5 mm posts + top_t,
-                              // from the fit test print. Measured from the board: housing top 12.26 (2.2 under
-                              // the top's inside), knob rim 17.42 (0.5 above the top face, knob on, centered).
+joy_depth = 15.9;             // head's outer top face down to the board's top surface: 13.5 mm posts + top_t,
+                              // from two fit test prints. Measured from the board: housing top 12.26 (1.1 under
+                              // the top's inside), knob rim 17.42 (1.5 above the top face, knob on, centered).
 // Panel-mount push buttons (red cap, threaded body, nut inside): measured.
 button_thread = 14.84;        // threaded body diameter
 button_d = button_thread + 0.5; // hole for the threads (PLA holes print a little small)
