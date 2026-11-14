@@ -15,7 +15,7 @@
 part = "assembly";
 
 // ---- Measure the real parts and adjust ----------------------------------------------
-devkit = [55.0, 28.5];        // DevKitC board outline
+devkit = [51.5, 28.23];       // ESP32 board outline, measured (length x width)
 devkit_h = 22;                // board + headers + wires, front-to-back depth needed
 battery = [62.0, 58.0, 16.0]; // 4xAA holder
 joy_board = [38.1, 38.1];     // Adafruit 512 breakout, measured 38.08 square, 1.6 thick
