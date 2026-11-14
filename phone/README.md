@@ -21,6 +21,29 @@ Stock PhoneVR has open issues: crashes on connect under Android 16, and USB neve
 
 ALVR server settings: **disable ALVR's own controllers**, so the VMT controllers take the left and right hand roles. Set the floor height once ARCore position works.
 
+## Linux laptop (Fedora, Intel Arc iGPU)
+
+The streaming laptop runs SteamVR and ALVR on Linux. Tested on Fedora 44, Intel Core Ultra 200V (Arc 140V, `xe` driver), SteamVR 2.18.4, ALVR `v21.0.0-dev14+nightly.2026.11.10`. ALVR v20.8.0 never got past error 307 here; use v21.
+
+1. **ALVR:** extract `alvr_streamer_linux.tar.gz` from the nightly, run `bin/alvr_dashboard`, finish the wizard and **always start SteamVR from the dashboard** (Launch SteamVR). Without the dashboard, the ALVR driver loads but adds no headset ("headset not detected").
+2. **SteamVR settings:** with SteamVR closed, add these to `"steamvr"` in `~/.local/share/Steam/config/steamvr.vrsettings`:
+   ```json
+   "forceDisableLinuxVulkanAsync": true,
+   "disableLinuxWaitForPresent": true
+   ```
+   The first stops the compositor hanging at 100% CPU after "Insufficient permission to create high priority queue" (error 307). The second stops it crashing a second after "Startup Complete" (null `vkWaitForPresentKHR` through ALVR's Vulkan layer).
+3. **vrmonitor crash:** SteamVR's Qt expects OpenSSL 1.0 and crashes on Fedora's 3.x while loading CA certificates. Link the Steam runtime's copies into a folder of their own:
+   ```sh
+   R=~/.local/share/Steam/steamapps/common/LegacySteamRuntime/steam-runtime/lib/x86_64-linux-gnu
+   mkdir -p ~/Apps/steamvr-openssl10 && ln -sf $R/libssl.so.1.0.0 $R/libcrypto.so.1.0.0 ~/Apps/steamvr-openssl10/
+   ```
+   and set SteamVR's launch options (Steam → SteamVR → Properties) to
+   `LD_LIBRARY_PATH=$HOME/Apps/steamvr-openssl10${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} ~/.local/share/Steam/steamapps/common/SteamVR/bin/vrmonitor.sh %command%`
+4. **Controllers:** `../tools/linux/vmt.sh` builds VMT for Linux and registers it; the bridge works unchanged.
+5. **Network:** turn off any VPN (Mullvad blocks LAN traffic) or allow local network sharing. The iPhone app can't advertise itself over mDNS, so add it in the dashboard (Devices → Add device manually) with the hostname from its lobby (e.g. `4119.client.local.`) and its IP.
+
+Still showing after all this: SteamVR's "Something is wrong (303)" status alert. It doesn't stop streaming.
+
 ## Fork work
 
 **You don't need to build it:** use the APK above. `./setup.sh` clones the source into `phone/PhoneVR` (gitignored), only needed to read or change the code. PR #458 moves the client to the ALVR v21 API, adds ARCore 6DoF, its own head-orientation filter (Mahony with gyro-bias estimation) and a seated neck model, supports Wired mode, and cuts display prediction to 30 ms.
