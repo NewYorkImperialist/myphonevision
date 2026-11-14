@@ -42,6 +42,7 @@ Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes co
 5. Then the tracker cases and controller shells. Measure the real parts first ([cases/README.md](cases/README.md)).
 
 ### Third person: parts and bring-up
+**Status (ygrfhf):** HUB, LEFT and RIGHT flashed and labeled; LEFT's GY-521 soldered and tested; end-to-end LEFT → hub → bridge works. 2 of 3 GY-521s are dead, so RIGHT needs a new one. Still to do: antennas (step 5), measurements (step 3), breadboard joystick/trigger/buttons (step 8, after Jayden's soldering). Handoff details in the Jayden issue.
 1. Check out parts at the hardware desk, P0 first (ESP32 boards, GY-521 / motion sensors). Ask whether you can take Jayden's share (the limit is one of each item per attendee).
 2. Ask the desk: which chip is the "Accelerometer/Gyroscopic Sensor"? Are there 2.4 GHz U.FL antennas? Is the limit per item or per pack?
 3. Measure the lab's 4×AA battery holder, joystick board (and its screw-hole spacing) and push buttons; send the numbers to industrial design.
@@ -66,9 +67,9 @@ Build both controllers from the tested parts ([docs/wiring.md](docs/wiring.md)),
 
 | Part | State |
 | --- | --- |
-| `firmware/controller`, `firmware/hub` | Compile for DevKitC (default) and Xiao ESP32S3 (PlatformIO, espressif32 6.12.0); reviewed; **not yet run on hardware** |
+| `firmware/controller`, `firmware/hub` | Compile for DevKitC (default) and Xiao ESP32S3 (PlatformIO, espressif32 6.12.0). **Running on hardware:** HUB, LEFT and RIGHT flashed; LEFT (with its GY-521) → ESP-NOW → hub → bridge at about 185 Hz. Gyro calibration retries 3× at boot (send `c` to recalibrate). Joystick, trigger and buttons not tested yet; RIGHT has no working GY-521 |
 | `firmware/slimevr/build.sh` | Builds stock SlimeVR v0.7.4 for DevKitC + 2× MPU-6050; not yet flashed |
-| `bridge/` (Python) | Hub serial or UDP to VMT OSC as Index controllers; 8 tests pass; `preflight` checks the setup; not yet run with SteamVR |
+| `bridge/` (Python) | Hub serial or UDP to VMT OSC as Index controllers; 8 tests pass; `preflight` checks the setup; receives real hub packets (`--serial <port> --no-hmd --debug`); not yet run with SteamVR |
 | `headset/`, `cases/` (OpenSCAD) | All parts render and export; sizes from datasheets until real parts are measured; nothing printed yet |
 | PhoneVR | Use the published APK (above); lens settings via `tools/cardboard_qr.py` |
 | `phone/ios/app` (iPhone client) | Builds and runs on the 16 Pro (free Apple ID). ARKit head pose, lens pass, rotational reprojection and 120 Hz done and checked in test mode (no server); **not yet streamed from SteamVR** (needs the laptop on ALVR v20.8.0); k1/k2 untuned until there are lenses |
