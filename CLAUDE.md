@@ -25,7 +25,9 @@ Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes co
 
 **Still needed:** 5 more push buttons (each controller needs A, B, system, grip; 8 total), 2 vibration motors, 2 battery holders + AA cells (or the Anker pack). **Body tracking is short:** SlimeVR needs 3 more ESP32 boards and 5–6 gyro IMUs. Unless teammates can still check out DevKitCs, plan on webcam body tracking.
 
-### Pixel owner: phone and streaming
+### Phone and streaming (TSVRN9)
+**Headset phone is now a friend's iPhone 16 Pro; the Pixel 7 is the fallback** (issue #3: CAD `-D` values, software plan). The iPhone path is our own client built from [kotleni/iPhoneVR](https://github.com/kotleni/iPhoneVR) with ARKit pose. It needs a Mac with Xcode, and its ALVR version decides the server version. Keep the Pixel steps below working until the team picks a go/no-go time.
+
 1. Confirm the Windows laptop's GPU is NVIDIA, AMD or Intel (hardware video encoder). If not, stop and re-plan (docs/plan.md, gate 1).
 2. Install SteamVR and the **ALVR nightly v21.0.0-dev14** (ALVR only connects matching versions).
 3. **Don't build PhoneVR.** Install the ready-made PR #458 app: `PhoneVR-v21.0.0-dev14-ARcore-v21-release-v1.0.1.apk` from https://github.com/righthandpaw/PhoneVR/releases. It already has reprojection and a Mali GPU fix (the Pixel 7 has a Mali GPU).
