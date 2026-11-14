@@ -80,8 +80,10 @@ final class Renderer {
             let startPollTime = CACurrentMediaTime()
             while true {
                 sched_yield()
+                // Show the newest decoded frame; older ones in the queue are already late.
                 objc_sync_enter(frameQueueLock)
-                queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
+                queuedFrame = frameQueue.last
+                frameQueue.removeAll()
                 objc_sync_exit(frameQueueLock)
                 if queuedFrame != nil {
                     isNewFrame = true
@@ -124,12 +126,17 @@ final class Renderer {
             let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
             // let framePreviouslyPredictedPose = queuedFrame != nil ? lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
             
+            // Report every new frame shown, even if its timestamp repeats: the server
+            // tags frames by guessing which tracking sample SteamVR rendered with
+            // (closest rotation, oldest on ties), so a still head gives many frames one
+            // old timestamp. Skipping repeats left ALVR seeing ~0.1 fps.
             let semaphore = inFlightSemaphore
+            let reportSubmit = isNewFrame
             commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
-                if queuedFrame != nil && self.lastSubmittedTimestamp != queuedFrame?.timestamp {
+                if reportSubmit, let frame = queuedFrame {
                     // vsync_queue_ns: time from submit to display, about one refresh.
-                    alvr_report_submit(queuedFrame!.timestamp, vsyncTimeNs)
-                    self.lastSubmittedTimestamp = queuedFrame!.timestamp
+                    alvr_report_submit(frame.timestamp, vsyncTimeNs)
+                    self.lastSubmittedTimestamp = frame.timestamp
                 }
                 semaphore.signal()
             }
@@ -304,13 +311,12 @@ final class Renderer {
         objc_sync_enter(frameQueueLock)
         framesSinceLastIDR += 1
 
-        // If we're receiving NALs timestamped from >600ms ago, stop decoding them
-        // to prevent a cascade of needless decoding lag
-        let ns_diff_from_last_req_ts = lastRequestedTimestamp > timestamp ? lastRequestedTimestamp &- timestamp : 0
-        let lagSpiked = (ns_diff_from_last_req_ts > 1000*1000*600 && framesSinceLastIDR > 90*2)
-        // TODO: adjustable framerate
-        if idrRequested || (lastRequestedTimestamp != 0 && (lagSpiked || framesSinceLastDecode > 90*2)) {
-            print("Handle spike!", idrRequested, framesSinceLastDecode, framesSinceLastIDR, ns_diff_from_last_req_ts)
+        // Refuse a frame only after a real decoder error. Never for looking "old": the
+        // timestamp is the server's guess of the tracking sample the frame was rendered
+        // with (closest rotation in ~3 s of history, oldest on ties), so with a still
+        // head it can be seconds old. Refusing those forced an IDR every few seconds.
+        if idrRequested {
+            print("Decoder error: asking for a key frame", framesSinceLastDecode, framesSinceLastIDR)
             // Refusing the frame makes ALVR request an IDR to resume the video feed
             idrRequested = false
             framesSinceLastIDR = 0

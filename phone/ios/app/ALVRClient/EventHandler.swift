@@ -231,8 +231,12 @@ class EventHandler: ObservableObject {
 
     /// A frame requested for `frameTimestampNs` reaches the screen at `displayNs`:
     /// nudge the prediction toward the real latency (10% per frame, 0 to 100 ms).
+    /// The server tags frames with its best rotation match from ~3 s of tracking
+    /// history (oldest on ties), so with a still head the timestamp can be seconds
+    /// old. Skip errors over 100 ms: those are stale matches, not latency.
     func updatePrediction(frameTimestampNs: UInt64, displayNs: UInt64) {
         let errorNs = Int64(bitPattern: displayNs &- frameTimestampNs)
+        guard abs(errorNs) < 100_000_000 else { return }
         let next = Int64(predictionNs) + errorNs / 10
         predictionNs = UInt64(min(max(next, 0), 100_000_000))
     }

@@ -45,7 +45,7 @@ How the stream path works (ALVR v21 API): every display refresh, `EventHandler.s
 1. SteamVR installed. **ALVR v21.0.0-dev14** streamer from the [ALVR nightlies](https://github.com/alvr-org/ALVR-nightly/releases) (`v21.0.0-dev14+nightly.2026.11.10`, the build the client is pinned to; ALVR only connects matching versions). Run the ALVR dashboard once so it registers its SteamVR driver.
 2. In the ALVR dashboard: **Headset → Controllers off** (ours come through VMT). Video: preferred refresh rate 60 or 72 to start; H.264 or HEVC both decode on the iPhone; foveated encoding off.
 3. Network: put the laptop and phone on the same network. **The laptop's Wi-Fi hotspot** is the safe choice (campus Wi-Fi usually blocks device-to-device traffic).
-4. On the phone: Start. The iPhone should appear in the ALVR dashboard as a new device: **Trust** it. SteamVR starts streaming; the screen shows SteamVR Home through the lens pass.
+4. On the phone: Start. **The iPhone won't appear in the dashboard by itself:** ALVR's discovery is mDNS multicast, and iOS blocks that without the `com.apple.developer.networking.multicast` entitlement, which a free Apple ID can't get. In the dashboard, use **Add device manually** with the hostname shown in the phone's lobby (e.g. `4119.client.local.`) and the phone's IP. The server then connects to the phone (TCP 9943, video on UDP 9944) and SteamVR starts streaming; the screen shows SteamVR Home through the lens pass.
 5. If it doesn't connect: same ALVR version on both sides? Windows firewall allowing ALVR on private networks? The phone app's lobby shows the hostname it advertises.
 
 ## Milestone 5: USB link (optional)
