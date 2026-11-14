@@ -8,7 +8,11 @@
 //   shim       focus shim, shim_t thick; print as many as focus needs
 //   spacer     rails that slide in behind the phone (after it's in) to take up
 //              the room left for the camera bar; print flat
-//   lens_ring  press-fit ring that locks a lens (stack) in its seat; print 2
+//   lens_ring  press-fit ring that locks a lens (stack) in its seat (or tube); print 2
+//   tube       focus tube (focus_tubes = true): holds one eye's lens stack and
+//              slides in the lens plate to focus; print 2, face end down
+//   tube_fit   short slice of the tube and its bore: print first to check the
+//              slide is snug (~15 min)
 //   jig        single-lens focus test tube (print this first, ~20 min)
 //   jig_ring   1 mm spacer ring for the jig
 //
@@ -20,9 +24,12 @@ part = "assembly";
 // ---- Measure these first (see headset/README.md) --------------------------
 // Stacked lenses (e.g. two 3x magnifiers per eye): measure the stack as one
 // lens. lens_thk = the whole stack's thickness; lens_f = the stack's focal length.
-lens_d = 25.0;          // lens diameter, calipers
-lens_thk = 6.0;         // lens (or stack) thickness at the rim
-lens_f = 45.0;          // focal length from the window-on-paper test
+// Defaults: two Carson TriView TV-26 magnifiers, all three lenses stacked per
+// eye, cut off the swivel (Jayden, 2026-11-14). Rough hand measurements; the
+// focus tubes cover the error.
+lens_d = 38.0;          // lens diameter, calipers (here: the plastic ring's outside)
+lens_thk = 21.1;        // lens (or stack) thickness at the rim
+lens_f = 33.0;          // focal length (here: phone ~20 mm behind the back glass, plus half the stack)
 focus_back_off = 2.5;   // sit the screen this much inside the focal length
 ipd = 63.0;             // lens center spacing
 
@@ -43,10 +50,25 @@ wall = 2.4;
 clear = 0.6;            // phone clearance per side
 lens_lip = 1.2;         // ledge on the face side that the lens rests on
 ring_t = 1.6;           // lens retaining ring thickness
-plate_t = max(4.0, lens_lip + lens_thk + ring_t);  // grows to fit a lens stack
+// Focus tubes: each eye's lens stack sits in its own tube that slides in a
+// snug bore through the lens plate. Pushed fully in, the tube is flush with
+// the face side and the lenses are closest to the phone; it sits at nominal
+// focus pulled out by tube_in, and pulls out further for longer focus. Lets each
+// wearer (and each eye) focus, e.g. a nearsighted judge without glasses.
+focus_tubes = true;
+tube_wall = 1.6;
+tube_fit = 0.3;         // bore minus tube diameter; print tube_fit first, tape the tube if loose
+tube_in = 6.0;          // travel toward the phone from nominal (push in)
+tube_id = lens_d + 0.3;
+tube_od = tube_id + 2 * tube_wall;
+tube_len = lens_lip + lens_thk + ring_t;
+bore_d = tube_od + tube_fit;
+stop_h = (bore_d - tube_id) / 2;   // 45-degree stop at the phone end of the bore: prints without support
+plate_t = focus_tubes ? tube_len + stop_h + 0.5
+                      : max(4.0, lens_lip + lens_thk + ring_t);  // grows to fit a lens stack
 lip = 2.0;              // tray lip that holds the phone's screen edge
 shim_t = 1.0;           // focus shim thickness
-shim_count = 2;         // shims fitted at nominal focus (gives +-adjustment)
+shim_count = focus_tubes ? 0 : 2;  // shims fitted at nominal focus (the tubes replace them)
 nose_w = 38;
 nose_h = 30;
 strap_slot = [4, 32];   // width, height of each strap slot (height = strap width)
@@ -62,7 +84,8 @@ in_h = phone_h + 2 * clear;
 W = in_w + 2 * wall;
 H = in_h + 2 * wall;
 lens_screen = lens_f - focus_back_off;
-lens_center_z = lens_lip + lens_thk / 2;          // lens optical center, from the face
+lens_center_z = lens_lip + lens_thk / 2           // lens optical center, from the face
+                - (focus_tubes ? tube_in : 0);   // (tubes: at nominal, pulled out by tube_in)
 tray_face_to_screen = lip;                       // screen sits on the lip
 body_len = lens_screen - (plate_t - lens_center_z) - tray_face_to_screen - shim_count * shim_t;
 // The pocket is deep enough for the camera bar to slide through; once the
@@ -73,15 +96,21 @@ flange = 9;             // corner flange size for bolts / zip ties
 
 // Shrink the nose notch if big lenses would break into it: keep its round tip
 // at least 2.5 mm clear of each lens seat.
-seat_r = (lens_d + 0.3) / 2;
+seat_r = focus_tubes ? bore_d / 2 : (lens_d + 0.3) / 2;
 nose_tip_r = nose_w * 0.33;
 nose_clear_y = sqrt(max(0, pow(seat_r + nose_tip_r + 2.5, 2) - pow(ipd / 2, 2)));
 nose_h_fit = min(nose_h, H / 2 - nose_clear_y + nose_w / 3);
 
 assert(body_len > 5, str("body_len ", body_len, " is too short: check lens_f and plate_t"));
-assert(ipd / 2 + lens_d / 2 + 1 < W / 2, "lenses don't fit across the shell");
+assert(ipd / 2 + seat_r + 1 < W / 2, "lenses don't fit across the shell");
+assert(seat_r + 1.5 < H / 2, "lens seats are taller than the shell");
+assert(ipd - 2 * seat_r > 6, str("lens seats nearly touch: ", ipd - 2 * seat_r, " mm between them"));
 echo(str("lens-to-screen ", lens_screen, " mm; spacer body ", body_len,
          " mm; lens plate ", plate_t, " mm; each shim moves focus ", shim_t, " mm"));
+if (focus_tubes)
+  echo(str("focus tubes: lens center to screen ", lens_screen - tube_in, " mm pushed fully in, ",
+           lens_screen, " at nominal (", tube_in, " mm out), ", lens_screen + 8,
+           " at 14 mm out; tube ", tube_od, " x ", tube_len, " mm, bore ", bore_d, " mm"));
 if (nose_h_fit < nose_h) echo(str("nose notch reduced to ", nose_h_fit, " mm to clear the lenses"));
 
 // Lens centers, relative to the shell's center.
@@ -133,8 +162,14 @@ module lens_plate() {
           }
     }
     for (p = lens_pos) translate([p[0], p[1], 0]) {
-      translate([0, 0, -1]) cylinder(d = lens_d - 2 * 1.2, h = plate_t + 2);  // aperture
-      translate([0, 0, lens_lip]) cylinder(d = lens_d + 0.3, h = plate_t);   // seat
+      if (focus_tubes) {
+        translate([0, 0, -1]) cylinder(d = bore_d, h = tube_len + 1);        // tube bore
+        translate([0, 0, tube_len - 0.01]) cylinder(d1 = bore_d, d2 = tube_id, h = stop_h + 0.02);  // stop
+        translate([0, 0, -1]) cylinder(d = tube_id, h = plate_t + 2);        // aperture
+      } else {
+        translate([0, 0, -1]) cylinder(d = lens_d - 2 * 1.2, h = plate_t + 2);  // aperture
+        translate([0, 0, lens_lip]) cylinder(d = lens_d + 0.3, h = plate_t);   // seat
+      }
     }
     nose(plate_t);
   }
@@ -216,6 +251,31 @@ module door() {
   }
 }
 
+// Holds one eye's lens stack: face lip at z = 0, stack, then a lens_ring
+// pressed in behind it. Print face end down.
+module tube() {
+  difference() {
+    cylinder(d = tube_od, h = tube_len);
+    translate([0, 0, -1]) cylinder(d = lens_d - 2 * 1.2, h = tube_len + 2);  // aperture
+    translate([0, 0, lens_lip]) cylinder(d = tube_id, h = tube_len);       // seat
+  }
+}
+
+// 8 mm of tube and of its bore with a little plate around it: the tube
+// should slide with a firm push and stay put. Too loose: tape round the tube,
+// or lower tube_fit. Too tight: raise tube_fit by 0.1-0.2.
+module tube_fit() {
+  translate([-(tube_od / 2 + bore_d / 2 + 10), 0, 0])
+    difference() {
+      cylinder(d = tube_od, h = 8);
+      translate([0, 0, -1]) cylinder(d = tube_id, h = 10);
+    }
+  difference() {
+    cylinder(d = bore_d + 8, h = 8);
+    translate([0, 0, -1]) cylinder(d = bore_d, h = 10);
+  }
+}
+
 module lens_ring() {
   // Press it into the seat behind the lens; a dab of glue if it's loose.
   difference() {
@@ -275,8 +335,11 @@ module assembly() {
   translate([0, 0, tray_z + lip]) phone_ghost();
   color("green") translate([0, 0, tray_z]) spacer();
   color("salmon") translate([0, 0, tray_z]) door();
-  for (p = lens_pos)
-    color("white", 0.5) translate([p[0], p[1], lens_lip]) cylinder(d = lens_d, h = lens_thk);
+  out = focus_tubes ? tube_in : 0;  // tubes shown at nominal focus
+  for (p = lens_pos) translate([p[0], p[1], -out]) {
+    if (focus_tubes) color("gray") tube();
+    color("white", 0.5) translate([0, 0, lens_lip]) cylinder(d = lens_d, h = lens_thk);
+  }
 }
 
 if (part == "assembly") assembly();
@@ -286,6 +349,8 @@ else if (part == "door") rotate([0, 90, 0]) translate([-door_x0 - 0.2 - door_t, 
 else if (part == "shim") shim();
 else if (part == "spacer") translate([0, 0, -(lip + phone_t)]) spacer();
 else if (part == "lens_ring") lens_ring();
+else if (part == "tube") tube();
+else if (part == "tube_fit") tube_fit();
 else if (part == "jig") jig();
 else if (part == "jig_ring") jig_ring();
 else assert(false, str("unknown part: ", part));
