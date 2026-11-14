@@ -17,7 +17,7 @@ struct MetalView: UIViewRepresentable {
     func makeMTKView(_ context: MetalView.Context) -> MTKView {
         let mtkView = MTKView()
         mtkView.delegate = context.coordinator
-        mtkView.preferredFramesPerSecond = 60
+        mtkView.preferredFramesPerSecond = VRSettings.current.displayHz
         if let metalDevice = MTLCreateSystemDefaultDevice() {
             mtkView.device = metalDevice
         }
@@ -65,6 +65,10 @@ struct MetalView: UIViewRepresentable {
         }
         
         func draw(in view: MTKView) {
+            let hz = VRSettings.current.displayHz
+            if view.preferredFramesPerSecond != hz {
+                view.preferredFramesPerSecond = hz
+            }
             guard let drawable = view.currentDrawable,
                   let renderPassDescriptor = view.currentRenderPassDescriptor else {
                 return

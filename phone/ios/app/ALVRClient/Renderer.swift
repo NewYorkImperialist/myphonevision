@@ -106,7 +106,7 @@ final class Renderer {
             framesSinceLastDecode += 1
             objc_sync_exit(frameQueueLock)
             
-            let vsyncTime = 1.0 / 60
+            let vsyncTime = 1.0 / Double(VRSettings.current.displayHz)
             let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
             // let framePreviouslyPredictedPose = queuedFrame != nil ? lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
             
@@ -127,6 +127,11 @@ final class Renderer {
         }
     }
     
+    /// When the frame being drawn now reaches the screen: about one refresh from now.
+    static func nextDisplayTime() -> Double {
+        return CACurrentMediaTime() + 1.0 / Double(VRSettings.current.displayHz)
+    }
+
     // ---- Test mode: no server needed ----
     // Renders the room into a side-by-side eye texture at a (optionally delayed) pose,
     // the way the PC renders a stream frame, then shows it through the same lens pass
@@ -150,7 +155,7 @@ final class Renderer {
 
         let settings = VRSettings.current
         let now = CACurrentMediaTime()
-        let displayHead = EventHandler.shared.headToWorld() ?? matrix_identity_float4x4
+        let displayHead = EventHandler.shared.headToWorld(at: Renderer.nextDisplayTime()) ?? matrix_identity_float4x4
         poseHistory.append((now, displayHead))
         poseHistory.removeAll { $0.time < now - 0.5 }
         let renderTime = now - Double(settings.latencyMs) / 1000
@@ -545,7 +550,7 @@ final class Renderer {
 
         // The frame comes back with the eye poses and FOVs it was rendered for (what
         // sendTracking sent for its timestamp). Fall back to our own FOV if they're unset.
-        let displayHead = EventHandler.shared.headToWorld() ?? matrix_identity_float4x4
+        let displayHead = EventHandler.shared.headToWorld(at: Renderer.nextDisplayTime()) ?? matrix_identity_float4x4
         let views = queuedFrame.viewParams
         let o = views[0].pose.orientation
         let renderedQuat = simd_quatf(ix: o.x, iy: o.y, iz: o.z, r: o.w)

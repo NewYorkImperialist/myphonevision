@@ -33,7 +33,7 @@ class EventHandler: ObservableObject {
     /// Initialize alvr client but don't allow connecting
     func initialize(size: CGSize) {
         if pollingStarted { return }   // the drawable can resize; ALVR is set up once
-        let refreshRates: [Float] = [60]
+        let refreshRates: [Float] = [60, 72, 90, 120]   // the stream rate; the display runs at 120 Hz with reprojection
         let width = UInt32(size.width)
         let oneViewWidth = (width / 2)
         let height = UInt32(size.height)
@@ -75,6 +75,11 @@ class EventHandler: ObservableObject {
     /// Recentered head pose from ARKit, or nil before tracking starts.
     func headToWorld() -> simd_float4x4? {
         return worldTracker?.headToWorld()
+    }
+
+    /// Head pose predicted to `time` (CACurrentMediaTime clock).
+    func headToWorld(at time: Double) -> simd_float4x4? {
+        return worldTracker?.headToWorld(at: time)
     }
 
     func recenter() {
@@ -187,7 +192,12 @@ class EventHandler: ObservableObject {
     /// while streaming. ALVR derives the head itself (left eye's orientation at the
     /// midpoint of the eyes), and resends the FOV whenever the eye distance changes.
     func sendTracking() {
-        guard alvrInitialized, let head = worldTracker?.headToWorld() else { return }
+        // Ask for a frame predicted for when it will be on screen (ALVR's measured
+        // pipeline latency); our own extrapolation is capped at 50 ms of that.
+        let predictionNs = alvr_get_head_prediction_offset_ns()
+        let targetNs = Clock.nowNs() &+ predictionNs
+        guard alvrInitialized,
+              let head = worldTracker?.headToWorld(at: CACurrentMediaTime() + Double(predictionNs) / 1e9) else { return }
         let settings = VRSettings.current
         let fovs = settings.eyeFovTangents()
         let q = simd_quatf(head.rotation3x3)
@@ -201,8 +211,6 @@ class EventHandler: ObservableObject {
         }
         let views = [view(-1, fovs[0]), view(1, fovs[1])]
 
-        // Ask for a frame predicted for when it will be on screen.
-        let targetNs = Clock.nowNs() &+ alvr_get_head_prediction_offset_ns()
         var noMotions = AlvrDeviceMotion()
         views.withUnsafeBufferPointer { viewsPtr in
             alvr_send_tracking(targetNs, viewsPtr.baseAddress, &noMotions, 0, nil, nil)

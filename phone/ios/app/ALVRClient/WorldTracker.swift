@@ -22,6 +22,9 @@ final class WorldTracker: NSObject, ARSessionDelegate {
     private var recenterTransform = matrix_identity_float4x4
     private var recenterRequested = true
     private var headToWorldRecentered = matrix_identity_float4x4
+    // The last two recentered poses with their ARKit timestamps, for prediction.
+    private var previous: (time: Double, head: simd_float4x4)?
+    private var latest: (time: Double, head: simd_float4x4)?
 
     // Eyes' center relative to the rear camera, in ARKit camera axes (the phone in
     // UI landscape-right: top of the phone on the viewer's left). Estimates for an
@@ -67,6 +70,24 @@ final class WorldTracker: NSObject, ARSessionDelegate {
         poseLock.lock()
         defer { poseLock.unlock() }
         return headToWorldRecentered
+    }
+
+    /// Head pose predicted to `time` (CACurrentMediaTime clock): the rotation keeps
+    /// turning at the rate between the last two ARKit frames, for at most 50 ms.
+    /// ARKit updates at 60 Hz, so this keeps a 120 Hz display from juddering.
+    func headToWorld(at time: Double) -> simd_float4x4 {
+        poseLock.lock()
+        defer { poseLock.unlock() }
+        guard let l = latest, let p = previous, l.time > p.time else { return headToWorldRecentered }
+        var delta = simd_quatf(l.head.rotation3x3) * simd_quatf(p.head.rotation3x3).inverse
+        if delta.real < 0 { delta = simd_quatf(vector: -delta.vector) }   // shortest way round
+        let ahead = Float(min(max(time - l.time, 0), 0.05))
+        guard delta.angle > 1e-5, ahead > 0 else { return l.head }
+        let rate = delta.angle / Float(l.time - p.time)
+        let predicted = simd_quatf(angle: rate * ahead, axis: delta.axis) * simd_quatf(l.head.rotation3x3)
+        var m = simd_float4x4(simd_normalize(predicted))
+        m.columns.3 = l.head.columns.3
+        return m
     }
 
     /// Make the current view the forward direction, and put the head at the
@@ -119,7 +140,10 @@ final class WorldTracker: NSObject, ARSessionDelegate {
             var raise = matrix_identity_float4x4
             raise.columns.3 = SIMD4<Float>(0, VRSettings.current.eyeHeightM, 0, 1)
             recenterTransform = raise * unYaw * unMove
+            latest = nil   // don't predict across the jump
         }
         headToWorldRecentered = recenterTransform * rawHead
+        previous = latest
+        latest = (frame.timestamp, headToWorldRecentered)
     }
 }

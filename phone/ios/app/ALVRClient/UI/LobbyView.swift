@@ -18,13 +18,16 @@ struct VRSettings {
     var eyeHeightM: Float = 1.65       // head height above the floor after a recenter
     var latencyMs: Float = 0           // test mode only: render the room this late, like the stream
     var reprojection: Float = 1        // 1 on, 0 off
+    var highRefresh: Float = 1         // 1: 120 Hz display, 0: 60 Hz (cooler)
+
+    var displayHz: Int { highRefresh > 0.5 ? 120 : 60 }
 
     static let screenWidthMm: Float = 144.8   // iPhone 16 Pro: 2622 x 1206 px at 460 ppi
     static let screenHeightMm: Float = 66.6
     static var current = VRSettings.load()
 
-    private static let keys = ["k1", "k2", "ipdMm", "screenToLensMm", "lensYOffsetMm", "eyeHeightM", "latencyMs", "reprojection"]
-    private static let paths: [WritableKeyPath<VRSettings, Float>] = [\.k1, \.k2, \.ipdMm, \.screenToLensMm, \.lensYOffsetMm, \.eyeHeightM, \.latencyMs, \.reprojection]
+    private static let keys = ["k1", "k2", "ipdMm", "screenToLensMm", "lensYOffsetMm", "eyeHeightM", "latencyMs", "reprojection", "highRefresh"]
+    private static let paths: [WritableKeyPath<VRSettings, Float>] = [\.k1, \.k2, \.ipdMm, \.screenToLensMm, \.lensYOffsetMm, \.eyeHeightM, \.latencyMs, \.reprojection, \.highRefresh]
 
     static func load() -> VRSettings {
         var s = VRSettings()
@@ -134,7 +137,7 @@ struct LobbyView: View {
                     EventHandler.shared.start()
                 }
 
-                Text("After pressing the start button, the device should lie on the table in a horizontal position.")
+                Text("Connects to ALVR v20.8.0 on the laptop. Put the headset on facing forward; tap to recenter, hold 1 s to come back here.")
                     .fontWeight(.light)
 
                 Button("Test mode (no server)") {
@@ -162,6 +165,7 @@ struct LobbyView: View {
             Section("Head") {
                 SettingSlider(title: "Eye height (m)", value: $vr.eyeHeightM, range: 1.0...2.0, step: 0.05, format: "%.2f")
                 Toggle("Reprojection", isOn: Binding(get: { vr.reprojection > 0.5 }, set: { vr.reprojection = $0 ? 1 : 0 }))
+                Toggle("120 Hz display (off: 60 Hz, cooler)", isOn: Binding(get: { vr.highRefresh > 0.5 }, set: { vr.highRefresh = $0 ? 1 : 0 }))
                 SettingSlider(title: "Test mode: simulated latency (ms)", value: $vr.latencyMs, range: 0...200, step: 10, format: "%.0f")
             }
             
