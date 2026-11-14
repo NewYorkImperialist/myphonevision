@@ -1,5 +1,8 @@
 // myphonevision headset shell, fully parametric. Tested with OpenSCAD 2026.10 (snapshot).
 //
+// Print one file at a time, never a whole folder: tube_fit first (the test), then
+// front, then the tubes once tube_fit slides right.
+//
 // Pick a part to export (or pass -D 'part="front"' on the command line):
 //   assembly   all parts in place, for checking fit (don't print)
 //   front      lens plate + spacer body as one print; print lens-plate-down
