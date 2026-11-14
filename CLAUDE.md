@@ -26,7 +26,7 @@ Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes co
 **Still needed:** 5 more push buttons (each controller needs A, B, system, grip; 8 total), 2 vibration motors, 2 battery holders + AA cells (or the Anker pack). **Body tracking is short:** SlimeVR needs 3 more ESP32 boards and 5–6 gyro IMUs. Unless teammates can still check out DevKitCs, plan on webcam body tracking.
 
 ### Phone and streaming (TSVRN9)
-**Headset phone is now a friend's iPhone 16 Pro; the Pixel 7 is the fallback** (issue #3: CAD `-D` values, software plan). The iPhone path is our own client built from [kotleni/iPhoneVR](https://github.com/kotleni/iPhoneVR) with ARKit pose; **Nafis (Nofees4Novembah) builds it on a Mac** (spec: [phone/ios/README.md](phone/ios/README.md)), and its ALVR version decides the server version. Keep the Pixel steps below working until the team picks a go/no-go time.
+**Headset phone is now a friend's iPhone 16 Pro; the Pixel 7 is the fallback** (issue #3: CAD `-D` values, software plan). The iPhone path is our own client built from [kotleni/iPhoneVR](https://github.com/kotleni/iPhoneVR) with ARKit pose; **Nafis (Nofees4Novembah) builds it on his Mac** ([phone/ios/README.md](phone/ios/README.md)); it's pinned to **ALVR v20.8.0**, so the laptop runs the v20.8.0 server for the iPhone (README: "Laptop setup for milestone 1") and the v21.0.0-dev14 nightly below only for the Pixel fallback. Keep the Pixel steps below working until the team picks a go/no-go time.
 
 1. Confirm the Windows laptop's GPU is NVIDIA, AMD or Intel (hardware video encoder). If not, stop and re-plan (docs/plan.md, gate 1).
 2. Install SteamVR and the **ALVR nightly v21.0.0-dev14** (ALVR only connects matching versions).
@@ -71,12 +71,13 @@ Build both controllers from the tested parts ([docs/wiring.md](docs/wiring.md)),
 | `bridge/` (Python) | Hub serial or UDP to VMT OSC as Index controllers; 8 tests pass; `preflight` checks the setup; not yet run with SteamVR |
 | `headset/`, `cases/` (OpenSCAD) | All parts render and export; sizes from datasheets until real parts are measured; nothing printed yet |
 | PhoneVR | Use the published APK (above); lens settings via `tools/cardboard_qr.py` |
+| `phone/ios/app` (iPhone client) | Builds and runs on the 16 Pro (free Apple ID). ARKit head pose, lens pass, rotational reprojection and 120 Hz done and checked in test mode (no server); **not yet streamed from SteamVR** (needs the laptop on ALVR v20.8.0); k1/k2 untuned until there are lenses |
 
 ## Working together (four people, four Claudes, one repo)
 
-GitHub logins: NewYorkImperialist = Jayden, TSVRN9 = Pixel owner, Nofees4Novembah and ygrfhf = industrial design / parts (add your role here on first commit).
+GitHub logins: NewYorkImperialist = Jayden, TSVRN9 = Pixel owner, Nofees4Novembah = Nafis, industrial design (headset, controller shells, lenses) and the iPhone app, ygrfhf = parts (add your role here on first commit).
 
-- **Stay in your folders.** Pixel owner: `phone/`, `tools/windows/`, `tools/cardboard_qr.py`. Industrial design: `headset/`, `cases/`, `tools/export-stl.sh`. Parts and Jayden: `firmware/`, `bridge/`, `docs/wiring.md`. Need a change in someone else's folder? Open an issue for them instead of editing it.
+- **Stay in your folders.** Pixel owner: `phone/`, `tools/windows/`, `tools/cardboard_qr.py`. Industrial design: `headset/`, `cases/`, `tools/export-stl.sh`; Nafis also `phone/ios/`. Parts and Jayden: `firmware/`, `bridge/`, `docs/wiring.md`. Need a change in someone else's folder? Open an issue for them instead of editing it.
 - **Push small commits straight to `main`.** `git pull --rebase` before every push; never force-push. No PRs; they're too slow for a 36-hour build.
 - **In this file, edit only your role's section and your rows of the state table.** Shared files (`README.md`, `docs/plan.md`) and the packet contract (`firmware/shared/packet.h` + `bridge/myphonevision_bridge/protocol.py`) change only after an issue that names everyone affected.
 

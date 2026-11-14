@@ -26,18 +26,18 @@ lens_f = 45.0;          // focal length from the window-on-paper test
 focus_back_off = 2.5;   // sit the screen this much inside the focal length
 ipd = 63.0;             // lens center spacing
 
-// ---- Phone: Pixel 7 (check with calipers; add a case's thickness if used) -
+// ---- Phone: iPhone 16 Pro (check with calipers; add a case's thickness if used)
 phone_w = 149.6;        // long edge
 phone_h = 71.5;         // short edge
 phone_t = 8.25;          // body thickness, not counting the camera bar
-cam_bar_h = 2.7;        // how far the camera bar sticks out past the back (measure)
-screen_w = 147.0;
-screen_h = 68.0;
-cam_from_top = 11.0;    // phone top edge to the near edge of the camera bar
-cam_bar_len = 19.0;     // camera bar size along the long edge, plus clearance
-usb_w = 13.0;           // USB-C plug overmold, plus clearance
-usb_h = 8.0;
+cam_bar_h = 4.35;        // how far the camera bar sticks out past the back (measure)
+screen_w = 144.8;
+screen_h = 66.7;
+cam_from_top = 3;    // phone top edge to the near edge of the camera bar
+cam_bar_len = 40.5;     // camera bar size along the long edge, plus clearance
 
+usb_w        = 13.0;  // USB-C plug housing width
+usb_h        = 8.0;   // USB-C plug housing height
 // ---- Shell ----------------------------------------------------------------
 wall = 2.4;
 clear = 0.6;            // phone clearance per side
