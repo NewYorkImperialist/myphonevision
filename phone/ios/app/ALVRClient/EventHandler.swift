@@ -37,14 +37,17 @@ class EventHandler: ObservableObject {
         var capabilities = AlvrClientCapabilities()
         capabilities.default_view_width = oneViewWidth
         capabilities.default_view_height = height
-        capabilities.refresh_rates = UnsafePointer(refreshRates)
         capabilities.refresh_rates_count = Int32(refreshRates.count)
         capabilities.external_decoder = true
         capabilities.foveated_encoding = false
         capabilities.encoder_high_profile = true
         capabilities.encoder_10_bits = true
         capabilities.encoder_av1 = false
-        alvr_initialize(capabilities)
+        // The pointer must stay valid while alvr_initialize copies the list.
+        refreshRates.withUnsafeBufferPointer { rates in
+            capabilities.refresh_rates = rates.baseAddress
+            alvr_initialize(capabilities)
+        }
         
         print("ALVR initialized.")
     }
