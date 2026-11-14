@@ -90,6 +90,22 @@ final class WorldTracker: NSObject, ARSessionDelegate {
         return m
     }
 
+    /// The latest rear-camera image with what's needed to line it up (AR passthrough).
+    struct CameraFrame {
+        let image: CVPixelBuffer              // YCbCr 4:2:0 biplanar, full range
+        let intrinsics: simd_float3x3         // in image pixels
+        let imageSize: SIMD2<Float>
+        let headAtCapture: simd_float4x4      // recentered head pose when it was captured
+        let cameraToHead: simd_float4x4       // the head in camera coordinates (head pose = camera pose * this): orientation flip + eye offset
+    }
+    private var cameraFrame: CameraFrame?
+
+    func latestCameraFrame() -> CameraFrame? {
+        poseLock.lock()
+        defer { poseLock.unlock() }
+        return cameraFrame
+    }
+
     /// Make the current view the forward direction, and put the head at the
     /// standing eye height above the origin.
     func recenter() {
@@ -145,5 +161,9 @@ final class WorldTracker: NSObject, ARSessionDelegate {
         headToWorldRecentered = recenterTransform * rawHead
         previous = latest
         latest = (frame.timestamp, headToWorldRecentered)
+        let resolution = frame.camera.imageResolution
+        cameraFrame = CameraFrame(image: frame.capturedImage, intrinsics: frame.camera.intrinsics,
+                                  imageSize: SIMD2(Float(resolution.width), Float(resolution.height)),
+                                  headAtCapture: headToWorldRecentered, cameraToHead: cameraToHead)
     }
 }

@@ -54,8 +54,19 @@ typedef struct
     matrix_float4x4 headToWorld;  // head pose between the eyes, meters, recentered
     vector_float4 lens;           // k1, k2, screen-to-lens mm, IPD mm
     vector_float4 screen;         // drawable width px, height px, mm per px, lens center y offset mm
-    vector_float4 misc;           // time s, unused, unused, unused
+    vector_float4 misc;           // time s, passthrough (1/0), unused, unused
 } VRUniforms;
+
+// AR passthrough: the rear camera image behind the frame.
+typedef struct
+{
+    matrix_float4x4 headToCamera; // rotation: display-time head -> camera axes when the image was captured
+    vector_float4 intrinsics;     // fx, fy, cx, cy in camera image pixels (ARKit intrinsics)
+    vector_float4 imageSize;      // width px, height px, assumed scene depth m, enabled (1/0)
+    vector_float4 eyeCenter;      // the eyes' center in camera axes, m
+    vector_float4 eyeRight;       // half the IPD along the head's right axis, in camera axes, m
+    vector_float4 key;            // stream key: mode (0 none, 1 near-black, 2 magenta), tolerance, softness, unused
+} VRCameraUniforms;
 
 // The frame being shown (an ALVR video frame, or test mode's rendered eyes).
 typedef struct

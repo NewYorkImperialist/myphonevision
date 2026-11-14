@@ -77,6 +77,10 @@ class EventHandler: ObservableObject {
         return worldTracker?.headToWorld()
     }
 
+    func latestCameraFrame() -> WorldTracker.CameraFrame? {
+        return worldTracker?.latestCameraFrame()
+    }
+
     /// Head pose predicted to `time` (CACurrentMediaTime clock).
     func headToWorld(at time: Double) -> simd_float4x4? {
         return worldTracker?.headToWorld(at: time)

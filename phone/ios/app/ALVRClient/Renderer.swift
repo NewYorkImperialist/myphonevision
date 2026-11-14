@@ -127,6 +127,49 @@ final class Renderer {
         }
     }
     
+    // ---- AR passthrough ----
+    private lazy var placeholderTexture: MTLTexture = {
+        let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba8Unorm, width: 1, height: 1, mipmapped: false)
+        return metalDevice.makeTexture(descriptor: desc)!
+    }()
+
+    /// Camera uniforms and Y/CbCr textures for the latest ARKit image, bound at
+    /// fragment buffer 2 and textures 2-3. With passthrough off (or no image yet)
+    /// the shader ignores them. The CVMetalTextures are kept until the GPU is done.
+    func bindCamera(encoder: MTLRenderCommandEncoder, commandBuffer: MTLCommandBuffer, displayHead: simd_float4x4) {
+        let s = VRSettings.current
+        var c = VRCameraUniforms()
+        c.key = SIMD4<Float>(s.keyMode, s.keyTolerance, 0.05, 0)
+        var luma: MTLTexture = placeholderTexture
+        var chroma: MTLTexture = placeholderTexture
+        if s.passthrough > 0.5, let cam = EventHandler.shared.latestCameraFrame(),
+           let y = makePlaneTexture(cam.image, plane: 0, format: .r8Unorm),
+           let cbcr = makePlaneTexture(cam.image, plane: 1, format: .rg8Unorm) {
+            // cameraToHead maps head coordinates into camera coordinates (see WorldTracker).
+            let headInCamera = cam.cameraToHead
+            c.headToCamera = headInCamera.rotationOnly * simd_transpose(cam.headAtCapture.rotationOnly) * displayHead.rotationOnly
+            let k = cam.intrinsics
+            c.intrinsics = SIMD4<Float>(k.columns.0.x, k.columns.1.y, k.columns.2.x, k.columns.2.y)
+            c.imageSize = SIMD4<Float>(cam.imageSize.x, cam.imageSize.y, 1.5, 1)
+            c.eyeCenter = SIMD4<Float>(headInCamera.columns.3.x, headInCamera.columns.3.y, headInCamera.columns.3.z, 0)
+            c.eyeRight = headInCamera.rotationOnly * SIMD4<Float>(s.ipdMm / 2000, 0, 0, 0)
+            luma = CVMetalTextureGetTexture(y)!
+            chroma = CVMetalTextureGetTexture(cbcr)!
+            commandBuffer.addCompletedHandler { _ in _ = (y, cbcr) }
+        }
+        encoder.setFragmentBytes(&c, length: MemoryLayout<VRCameraUniforms>.stride, index: 2)
+        encoder.setFragmentTexture(luma, index: 2)
+        encoder.setFragmentTexture(chroma, index: 3)
+    }
+
+    private func makePlaneTexture(_ buffer: CVPixelBuffer, plane: Int, format: MTLPixelFormat) -> CVMetalTexture? {
+        var texture: CVMetalTexture?
+        let status = CVMetalTextureCacheCreateTextureFromImage(
+            nil, metalTextureCache, buffer, nil, format,
+            CVPixelBufferGetWidthOfPlane(buffer, plane), CVPixelBufferGetHeightOfPlane(buffer, plane), plane, &texture)
+        return status == kCVReturnSuccess ? texture : nil
+    }
+
     /// When the frame being drawn now reaches the screen: about one refresh from now.
     static func nextDisplayTime() -> Double {
         return CACurrentMediaTime() + 1.0 / Double(VRSettings.current.displayHz)
@@ -187,6 +230,7 @@ final class Renderer {
             encoder.setFragmentBytes(&displayUniforms, length: MemoryLayout<VRUniforms>.stride, index: 0)
             encoder.setFragmentBytes(&frameUniforms, length: MemoryLayout<VRFrameUniforms>.stride, index: 1)
             encoder.setFragmentTexture(testEyesTexture, index: 0)
+            bindCamera(encoder: encoder, commandBuffer: commandBuffer, displayHead: displayHead)
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
             encoder.endEncoding()
         }
@@ -202,7 +246,7 @@ final class Renderer {
             headToWorld: head,
             lens: SIMD4<Float>(s.k1, s.k2, s.screenToLensMm, s.ipdMm),
             screen: SIMD4<Float>(w, h, VRSettings.screenWidthMm / max(w, h), s.lensYOffsetMm),
-            misc: SIMD4<Float>(Float(CACurrentMediaTime().truncatingRemainder(dividingBy: 1000)), 0, 0, 0))
+            misc: SIMD4<Float>(Float(CACurrentMediaTime().truncatingRemainder(dividingBy: 1000)), s.passthrough, 0, 0))
     }
 
     /// Reprojection rotates each eye ray from the display-time head into the head the
@@ -563,6 +607,7 @@ final class Renderer {
         var frameUniforms = Renderer.makeFrameUniforms(renderedHead: renderedHead, displayHead: displayHead, fovTan: fovTan)
         renderEncoder.setFragmentBytes(&displayUniforms, length: MemoryLayout<VRUniforms>.stride, index: 0)
         renderEncoder.setFragmentBytes(&frameUniforms, length: MemoryLayout<VRFrameUniforms>.stride, index: 1)
+        bindCamera(encoder: renderEncoder, commandBuffer: commandBuffer, displayHead: displayHead)
         
         let pixelBuffer = queuedFrame.imageBuffer
         

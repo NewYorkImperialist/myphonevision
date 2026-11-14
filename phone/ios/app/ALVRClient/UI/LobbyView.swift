@@ -19,6 +19,9 @@ struct VRSettings {
     var latencyMs: Float = 0           // test mode only: render the room this late, like the stream
     var reprojection: Float = 1        // 1 on, 0 off
     var highRefresh: Float = 1         // 1: 120 Hz display, 0: 60 Hz (cooler)
+    var passthrough: Float = 0         // 1: rear camera behind the frame (AR mode)
+    var keyMode: Float = 1             // stream pixels that become see-through: 0 none, 1 near-black, 2 magenta
+    var keyTolerance: Float = 0.04     // how close to the key color counts as key (linear RGB)
 
     var displayHz: Int { highRefresh > 0.5 ? 120 : 60 }
 
@@ -26,8 +29,10 @@ struct VRSettings {
     static let screenHeightMm: Float = 66.6
     static var current = VRSettings.load()
 
-    private static let keys = ["k1", "k2", "ipdMm", "screenToLensMm", "lensYOffsetMm", "eyeHeightM", "latencyMs", "reprojection", "highRefresh"]
-    private static let paths: [WritableKeyPath<VRSettings, Float>] = [\.k1, \.k2, \.ipdMm, \.screenToLensMm, \.lensYOffsetMm, \.eyeHeightM, \.latencyMs, \.reprojection, \.highRefresh]
+    private static let keys = ["k1", "k2", "ipdMm", "screenToLensMm", "lensYOffsetMm", "eyeHeightM", "latencyMs", "reprojection", "highRefresh",
+                               "passthrough", "keyMode", "keyTolerance"]
+    private static let paths: [WritableKeyPath<VRSettings, Float>] = [\.k1, \.k2, \.ipdMm, \.screenToLensMm, \.lensYOffsetMm, \.eyeHeightM, \.latencyMs, \.reprojection, \.highRefresh,
+                                                                      \.passthrough, \.keyMode, \.keyTolerance]
 
     static func load() -> VRSettings {
         var s = VRSettings()
@@ -167,6 +172,18 @@ struct LobbyView: View {
                 Toggle("Reprojection", isOn: Binding(get: { vr.reprojection > 0.5 }, set: { vr.reprojection = $0 ? 1 : 0 }))
                 Toggle("120 Hz display (off: 60 Hz, cooler)", isOn: Binding(get: { vr.highRefresh > 0.5 }, set: { vr.highRefresh = $0 ? 1 : 0 }))
                 SettingSlider(title: "Test mode: simulated latency (ms)", value: $vr.latencyMs, range: 0...200, step: 10, format: "%.0f")
+            }
+
+            Section("AR passthrough") {
+                Toggle("Camera behind the image", isOn: Binding(get: { vr.passthrough > 0.5 }, set: { vr.passthrough = $0 ? 1 : 0 }))
+                Picker("See-through color (stream)", selection: Binding(get: { Int(vr.keyMode) }, set: { vr.keyMode = Float($0) })) {
+                    Text("None").tag(0)
+                    Text("Black").tag(1)
+                    Text("Magenta").tag(2)
+                }
+                SettingSlider(title: "Key tolerance", value: $vr.keyTolerance, range: 0...0.3, step: 0.01, format: "%.2f")
+                Text("Test mode shows a floating panel and two balls over the camera. With the stream, pixels in the see-through color show the room (issue #5).")
+                    .fontWeight(.light)
             }
             
             Section("Server") {
