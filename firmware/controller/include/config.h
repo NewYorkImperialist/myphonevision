@@ -42,7 +42,7 @@
 #define SEND_HZ 200
 #define STICK_DEADZONE 0.08f   // fraction of full scale
 #define STICK_INVERT_X 0
-#define STICK_INVERT_Y 1       // most breakout joysticks read low when pushed up
+#define STICK_INVERT_Y 0       // Adafruit 512 reads high when pushed up (header toward the wrist), tested on LEFT
 #define TRIGGER_RAW_MIN 150    // ADC counts with the trigger released
 #define TRIGGER_RAW_MAX 3500   // ADC counts at a firm squeeze
 #define GYRO_CAL_MS 2000       // hold still this long after power-on
