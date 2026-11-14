@@ -100,6 +100,7 @@ Issues are the team's message board, for people and their Claudes alike. One iss
 
 - **No Claude attribution.** Don't add `Co-Authored-By: Claude` or "Generated with Claude Code" lines to commits or PR descriptions. Commits are authored by the teammate making them.
 - **Measure before printing.** Every CAD size is a parameter; pass measured values with `-D` instead of editing defaults blindly. Print fit tests before long prints.
+- **Print one file at a time, test file first.** Never send a whole STL folder to the printer (it prints every part in it). Before any long print, print that part's small test file alone and check it by hand: headset `tube_fit` (branch `lens-tubes`), controller `handle_fit` (branch `controller-shells`), or a `cases/fit_tests.scad` part. When telling someone what to print, name the single file.
 - **Keep firmware and bridge in sync:** the packet format lives in `firmware/shared/packet.h` and is mirrored in `bridge/myphonevision_bridge/protocol.py`. Change both or neither.
 - **Verify, don't assume:** after changing firmware, run `pio run` in that folder. After changing the bridge, run `pytest` in `bridge/`. After changing CAD, render the part and look at it.
 - **Update this file** when the plan or the state above changes (who's doing what, what's done, what's blocked), so the next person's Claude starts with the truth.
