@@ -6,7 +6,7 @@
 //   lens_seats   rings with seats at lens_d + 0.1 / 0.3 / 0.5 / 0.7 mm: find the
 //                snug one -> adjust lens_d in headset.scad by that clearance
 //   lens_rings   retaining rings at 3 press-fit tightnesses, for the snug seat
-//   phone        10 mm slice of the phone tray: slide the Pixel through it,
+//   phone        10 mm slice of the phone tray: slide the phone through it,
 //                camera end first, to check width, thickness, the camera bar
 //                and the screen lip -> headset.scad clear, cam_bar_h
 //   frames       low outline frames for the 4xAA holder, the DevKitC and the
@@ -25,9 +25,9 @@ part = "all";
 // ---- Same parameters as the real designs ----------------------------------------
 lens_d = 25.0;
 lens_thk = 6.0;
-phone_h = 73.2;               // Pixel 7 short edge
-phone_t = 8.7;                // Pixel 7 thickness (body, without the camera bar)
-cam_bar_h = 2.7;              // camera bar protrusion past the back
+phone_h = 71.5;               // iPhone 16 Pro short edge
+phone_t = 8.25;               // iPhone 16 Pro thickness (body, without the camera bump)
+cam_bar_h = 4.35;             // camera bump protrusion past the back
 clear = 0.6;                  // headset.scad phone clearance per side
 lip = 2.0;
 battery = [62.0, 58.0, 16.0];
