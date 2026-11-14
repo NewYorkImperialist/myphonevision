@@ -35,11 +35,15 @@ Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes co
 5. Once the lenses are measured, run `tools/cardboard_qr.py` and scan the QR code with the app's "switch viewer" button.
 
 ### Industrial design
-1. Install OpenSCAD: `brew install --cask openscad@snapshot` on macOS (the plain `openscad` cask is disabled), or a snapshot from openscad.org.
-2. **Get the lenses** (see above) and measure them.
-3. **Print fit tests first** ([cases/fit_tests.scad](cases/fit_tests.scad)): the **phone** slice now; **lens_seats** once the lenses are measured.
-4. Export with the measured numbers: `tools/export-stl.sh -D lens_d=… -D lens_thk=… -D lens_f=…`, then start the headset print (about 6 h; `front` first).
-5. Then the tracker cases and controller shells. Measure the real parts first ([cases/README.md](cases/README.md)).
+**Status (Nafis, 2026-11-14 evening):**
+- **Controller parts measured, on `main`** (merge 46eba10). Joystick: hole 25.8 and 13.5 mm posts (`joy_depth` 15.9), after two fit test prints. Panel-mount buttons: thread 14.84, ring 19.19, 14.46 deep. ESP32: 51.5 × 28.23. Jayden's `controller-shells` (A button only, measured battery and FSR, `handle_fit` test) builds on these.
+- **Headset:** the phone slice v2 fits; the phone holder redesign is parked. Lenses are two Carson TriView TV-26, 3 stacked per eye. Jayden's `lens-tubes` (sliding focus tubes) is printing `front`, `tube` and `tube_fit`.
+- **Face foam:** got it. **Strap:** in progress (#9).
+
+1. Re-measure the lens stack with calipers and post it on #4: ring outside diameter, stack thickness, focal length (paper method), phone distance by eye.
+2. Once `tube_fit` slides right, merge `lens-tubes` into `main` with the measured `lens_d` / `lens_thk` / `lens_f`.
+3. OpenSCAD: `brew install --cask openscad@snapshot` on macOS (the plain `openscad` cask is disabled). It crashes inside Claude Code's sandbox (a "neon" Qt error); run it outside, or with the sandbox off.
+4. Print one file at a time, the part's fit test first (`tools/upload-print.sh FILE` gives the makerspace pickup code).
 
 ### Third person: parts and bring-up
 **Status (ygrfhf):** both controllers wired and tested, running wirelessly on 4×AA through the hub (LEFT ~195 Hz, RIGHT ~148 Hz). Each has IMU, joystick, A button, FSR grip (RIGHT's needs replacing; the bridge sends it as grip, there is no trigger), vibration and antenna. LEFT has a GY-521, RIGHT an Adafruit BNO055. Grip, B and system buttons dropped. What goes in the shells, with sizes: [docs/wiring.md](docs/wiring.md) step 2h.
@@ -70,10 +74,10 @@ Build both controllers from the tested parts ([docs/wiring.md](docs/wiring.md)),
 | `firmware/controller`, `firmware/hub` | Compile for DevKitC (default) and Xiao ESP32S3 (PlatformIO, espressif32 6.12.0). **Running on hardware:** HUB, LEFT, RIGHT; both controllers → ESP-NOW → hub → bridge on battery. Auto-detects MPU-6050 or BNO055; `STICK_INVERT_Y 0` for the Adafruit 512. Gyro calibration retries 3× at boot (send `c` to recalibrate). BNO055 tilt not yet checked in a shell |
 | `firmware/slimevr/build.sh` | Builds stock SlimeVR v0.7.4 for DevKitC + 2× MPU-6050; not yet flashed |
 | `bridge/` (Python) | Hub serial or UDP to VMT OSC as Index controllers; 8 tests pass; `preflight` checks the setup; receives real hub packets (`--serial <port> --no-hmd --debug`); not yet run with SteamVR |
-| `headset/`, `cases/` (OpenSCAD) | All parts render and export; sizes from datasheets until real parts are measured; nothing printed yet |
+| `headset/`, `cases/` (OpenSCAD) | All parts render and export. **Controller:** joystick, buttons and ESP32 measured; joystick mount checked with two fit test prints. **Headset:** phone thickness and bump measured, phone slice printed and fits; lens values (Carson TriView 3-stack) are rough until re-measured (#4); `front`, `tube`, `tube_fit` printing from `lens-tubes` (not merged) |
 | PhoneVR | Use the published APK (above); lens settings via `tools/cardboard_qr.py` |
 | `tools/linux/vmt.sh` (VMT on Linux) | Builds and loads in SteamVR 2.18.4 next to ALVR v21; answers `/VMT/Out/Alive`; test poses show up as VMT_0 left / VMT_1 right Index controllers (preflight OK); button and trigger input reach SteamVR. **End to end on Linux:** LEFT → hub → bridge (~197 Hz) → VMT → SteamVR, tracked (Running_OK) on the left-hand role. VMT rejects every pose until a room matrix is set; the script writes an identity one. Haptics untested; no phone has streamed video yet |
-| `phone/ios/app` (iPhone client) | Builds and runs on the 16 Pro (free Apple ID). ARKit head pose, lens pass, rotational reprojection and 120 Hz done and checked in test mode (no server); **not yet streamed from SteamVR** (needs the laptop on ALVR v20.8.0); k1/k2 untuned until there are lenses |
+| `phone/ios/app` (iPhone client) | Builds and runs on the 16 Pro (free Apple ID). ARKit head pose, lens pass, rotational reprojection and 120 Hz done and checked in test mode (no server); AR passthrough with LiDAR depth and people/hand occlusion on `main` (objects drift in 3D: open). **ALVR v21.0.0-dev14 port on branch `ios-app`** (a0d0231; library builds, Swift typechecks, not run on the phone; not yet merged with the passthrough work). **Not yet streamed from SteamVR.** Lens defaults still assume a 45 mm lens; k1/k2 untuned until the TriView stack is in the headset |
 
 ## Working together (four people, four Claudes, one repo)
 
