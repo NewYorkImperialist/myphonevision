@@ -2,7 +2,7 @@
 
 Use this if there aren't enough ESP32 boards and gyro IMUs for SlimeVR (we have 3 MPU-6050s and 3 boards, all needed for the controllers and hub). [MediaPipe-VR-Fullbody-Tracking](https://github.com/ju1ce/Mediapipe-VR-Fullbody-Tracking) watches you through the Logitech webcam and turns your pose into hip and foot trackers. Nothing is worn. It's less accurate than IMU trackers: you have to stay in the camera's view, and depth is weak.
 
-**It hangs the skeleton off the headset's position, like SlimeVR.** With a 3DoF head (no ARCore position), the body stays pinned in place. Get the phone's ARCore position working first.
+**It hangs the skeleton off the headset's position, like SlimeVR.** With a 3DoF head (no position tracking), the body stays pinned in place. Get the headset's position working first: ARKit on the iPhone 16 Pro (the current plan, issue #3), or ARCore in the PhoneVR app on the Pixel 7 fallback.
 
 ## Which version
 
@@ -49,7 +49,7 @@ Port check: VMT uses 39570/39571 and VRChat OSC uses 9000, so the three don't cl
 | --- | --- |
 | Camera doesn't open | Try IDs 0–3; close other apps using the camera; set the width and height to the camera's resolution |
 | "Connection to SteamVR fails" (v0.6) | SteamVR open with the headset connected; driver installed and enabled; if SteamVR runs as admin, run `bin/mediapipepose.exe` as admin too. Or switch to v0.7 OSC mode |
-| Body pinned in place, legs move but you don't travel | The headset has no position (3DoF). Fix ARCore in the PhoneVR app first |
+| Body pinned in place, legs move but you don't travel | The headset has no position (3DoF). Fix head position first: ARKit in the iPhone app, or ARCore in PhoneVR on the Pixel |
 | Jittery legs | More light, contrasting clothes, whole body in frame; raise the smoothing |
 | Controllers gone after installing v0.6 | Restart SteamVR |
 | DLL load failed on startup | Windows "N" edition: install the Media Feature Pack |
