@@ -24,6 +24,7 @@ struct VRSettings {
     var latencyMs: Float = 0           // test mode only: render the room this late, like the stream
     var reprojection: Float = 1        // 1 on, 0 off
     var highRefresh: Float = 1         // 1: 120 Hz display, 0: 60 Hz (cooler)
+    var prediction: Float = 1          // 1: predict the head ahead in time, 0: send/show the current pose
     var passthrough: Float = 0         // 1: rear camera behind the frame (AR mode)
     var keyMode: Float = 1             // stream pixels that become see-through: 0 none, 1 near-black, 2 magenta
     var keyTolerance: Float = 0.04     // how close to the key color counts as key (linear RGB)
@@ -38,9 +39,9 @@ struct VRSettings {
     static var current = VRSettings.load()
 
     private static let keys = ["k1", "k2", "ipdMm", "screenToLensMm", "lensYOffsetMm", "fovLimitDeg", "eyeHeightM", "latencyMs", "reprojection", "highRefresh",
-                               "passthrough", "keyMode", "keyTolerance", "lidarDepth", "occlusion", "handDistanceM"]
+                               "prediction", "passthrough", "keyMode", "keyTolerance", "lidarDepth", "occlusion", "handDistanceM"]
     private static let paths: [WritableKeyPath<VRSettings, Float>] = [\.k1, \.k2, \.ipdMm, \.screenToLensMm, \.lensYOffsetMm, \.fovLimitDeg, \.eyeHeightM, \.latencyMs, \.reprojection, \.highRefresh,
-                                                                      \.passthrough, \.keyMode, \.keyTolerance, \.lidarDepth, \.occlusion, \.handDistanceM]
+                                                                      \.prediction, \.passthrough, \.keyMode, \.keyTolerance, \.lidarDepth, \.occlusion, \.handDistanceM]
 
     /// Bump when the lens defaults change for new lenses: phones that saved the old
     /// lens settings start from the new defaults once (the other settings are kept).
@@ -121,6 +122,40 @@ class LobbyViewModel: ObservableObject {
     }
 }
 
+/// The phone's IPv4 addresses, for adding it by hand in the ALVR dashboard (iOS blocks
+/// ALVR's mDNS discovery without the multicast entitlement). Over USB, Personal Hotspot
+/// puts the phone on a `bridge` interface, usually 172.20.10.1.
+struct PhoneAddress: Identifiable, Equatable {
+    let name: String
+    let address: String
+    var id: String { name + address }
+    var label: String {
+        if name.hasPrefix("bridge") { return "USB / Personal Hotspot" }
+        if name == "en0" { return "Wi-Fi" }
+        return name
+    }
+
+    static func current() -> [PhoneAddress] {
+        var list: [PhoneAddress] = []
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return [] }
+        defer { freeifaddrs(ifaddr) }
+        for ptr in sequence(first: first, next: { $0.pointee.ifa_next }) {
+            let flags = Int32(ptr.pointee.ifa_flags)
+            guard flags & (IFF_UP | IFF_RUNNING) == (IFF_UP | IFF_RUNNING), flags & IFF_LOOPBACK == 0,
+                  let sa = ptr.pointee.ifa_addr, sa.pointee.sa_family == UInt8(AF_INET) else { continue }
+            let name = String(cString: ptr.pointee.ifa_name)
+            // Cellular and VPN tunnels can't be reached from the laptop.
+            if name.hasPrefix("pdp_ip") || name.hasPrefix("utun") || name.hasPrefix("ipsec") { continue }
+            var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            guard getnameinfo(sa, socklen_t(sa.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 else { continue }
+            list.append(PhoneAddress(name: name, address: String(cString: host)))
+        }
+        // USB hotspot first: it's the one to use when it's there.
+        return list.sorted { ($0.name.hasPrefix("bridge") ? 0 : 1) < ($1.name.hasPrefix("bridge") ? 0 : 1) }
+    }
+}
+
 struct ListItem: View {
     let title: String
     let content: String
@@ -141,6 +176,7 @@ struct LobbyView: View {
     @ObservedObject private var viewModel = LobbyViewModel()
     @ObservedObject private var eventHandler = EventHandler.shared
     @State private var vr = VRSettings.current
+    @State private var addresses: [PhoneAddress] = []
 
     var body: some View {
         List {
@@ -159,7 +195,7 @@ struct LobbyView: View {
                     EventHandler.shared.start()
                 }
 
-                Text("Connects to ALVR v20.8.0 on the laptop. Put the headset on facing forward; tap to recenter, hold 1 s to come back here.")
+                Text("Connects to ALVR v21.0.0-dev14 on the laptop (the same server as the Pixel). Put the headset on facing forward; tap to recenter, hold 1 s to come back here.")
                     .fontWeight(.light)
 
                 Button("Test mode (no server)") {
@@ -188,6 +224,7 @@ struct LobbyView: View {
             Section("Head") {
                 SettingSlider(title: "Eye height (m)", value: $vr.eyeHeightM, range: 1.0...2.0, step: 0.05, format: "%.2f")
                 Toggle("Reprojection", isOn: Binding(get: { vr.reprojection > 0.5 }, set: { vr.reprojection = $0 ? 1 : 0 }))
+                Toggle("Head prediction (off: current pose)", isOn: Binding(get: { vr.prediction > 0.5 }, set: { vr.prediction = $0 ? 1 : 0 }))
                 Toggle("120 Hz display (off: 60 Hz, cooler)", isOn: Binding(get: { vr.highRefresh > 0.5 }, set: { vr.highRefresh = $0 ? 1 : 0 }))
                 SettingSlider(title: "Test mode: simulated latency (ms)", value: $vr.latencyMs, range: 0...200, step: 10, format: "%.0f")
             }
@@ -215,9 +252,18 @@ struct LobbyView: View {
                     .fontWeight(.light)
             }
             
-            Section("Server") {
-                ListItem(title: "IP", content: "\(eventHandler.ipAddr)")
+            Section {
                 ListItem(title: "Hostname", content: "\(eventHandler.hostname)")
+                ForEach(addresses) { a in
+                    ListItem(title: a.label, content: a.address)
+                }
+                if addresses.isEmpty {
+                    Text("No network. Plug in USB with Personal Hotspot on, or join Wi-Fi.").fontWeight(.light)
+                }
+            } header: {
+                Text("Add this phone in the ALVR dashboard")
+            } footer: {
+                Text("ALVR dashboard → Add device manually: the hostname and one IP. Over USB, use the USB / Personal Hotspot IP (Settings → Personal Hotspot → Allow Others to Join; Wi-Fi off on both ends).")
             }
             
             Section("Tracking") {
@@ -227,6 +273,12 @@ struct LobbyView: View {
         }
         .onAppear {
             viewModel.loadSettings()
+            addresses = PhoneAddress.current()
+        }
+        // Interfaces come and go (USB cable, hotspot, Wi-Fi), so keep the list fresh.
+        .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
+            let now = PhoneAddress.current()
+            if now != addresses { addresses = now }
         }
     }
 }

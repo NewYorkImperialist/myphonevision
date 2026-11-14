@@ -19,7 +19,11 @@ final class Renderer {
     struct QueuedFrame {
         let imageBuffer: CVImageBuffer
         let timestamp: UInt64
-        let viewParams: [AlvrViewParams]
+        /// When the frame's data reached the phone (Clock.nowNs).
+        let arrivalNs: UInt64
+        /// Eye poses and FOVs the frame was rendered for, from alvr_report_compositor_start
+        /// when the frame is first shown. Zero until then (the lens pass falls back).
+        var viewParams: [AlvrViewParams] = [AlvrViewParams(), AlvrViewParams()]
     }
     
     static var shared: Renderer? = nil
@@ -73,15 +77,18 @@ final class Renderer {
         framesRendered += 1
         
         var queuedFrame: QueuedFrame? = nil
+        var isNewFrame = false
         if true {
             let startPollTime = CACurrentMediaTime()
             while true {
                 sched_yield()
+                // Show the newest decoded frame; older ones in the queue are already late.
                 objc_sync_enter(frameQueueLock)
-                queuedFrame = frameQueue.count > 0 ? frameQueue.removeFirst() : nil
+                queuedFrame = frameQueue.last
+                frameQueue.removeAll()
                 objc_sync_exit(frameQueueLock)
                 if queuedFrame != nil {
-                    lastQueuedFrame = queuedFrame
+                    isNewFrame = true
                     break
                 }
 
@@ -97,8 +104,32 @@ final class Renderer {
             }
         }
         
-        if queuedFrame != nil && lastSubmittedTimestamp != queuedFrame!.timestamp {
-            alvr_report_compositor_start(queuedFrame!.timestamp)
+        if isNewFrame, var frame = queuedFrame {
+            // ALVR returns the eye poses this frame was rendered for; if it has none,
+            // keep the previous frame's.
+            var metadata = AlvrVideoFrameMetadata()
+            if alvr_report_compositor_start(frame.timestamp, &metadata) {
+                frame.viewParams = [metadata.view_params.0, metadata.view_params.1]
+            } else if let previous = lastQueuedFrame {
+                frame.viewParams = previous.viewParams
+            }
+            // A Linux server can't tell which pose a frame was rendered with (its Vulkan
+            // layer looks for function names that SteamVR's stripped vrcompositor
+            // lacks), so it tags every frame with an arbitrary sample up to 3 s old.
+            // SteamVR renders with its newest pose, so if the tag is far from the pose
+            // we sent just before the frame arrived, reproject from that pose instead.
+            // FOV still comes from the metadata.
+            var poseTimestamp = frame.timestamp
+            if let sent = EventHandler.shared.sentPose(atSendTime: frame.arrivalNs &- EventHandler.renderLeadNs),
+               abs(Int64(bitPattern: frame.timestamp &- sent.targetNs)) > 150_000_000 {
+                frame.viewParams[0].pose.orientation = sent.orientation
+                frame.viewParams[1].pose.orientation = sent.orientation
+                poseTimestamp = sent.targetNs
+            }
+            let vsyncNs = UInt64(1e9 / Double(VRSettings.current.displayHz))
+            EventHandler.shared.updatePrediction(frameTimestampNs: poseTimestamp, displayNs: Clock.nowNs() &+ vsyncNs)
+            queuedFrame = frame
+            lastQueuedFrame = frame
         }
         
         if queuedFrame != nil {
@@ -110,12 +141,17 @@ final class Renderer {
             let vsyncTimeNs = UInt64(vsyncTime * Double(NSEC_PER_SEC))
             // let framePreviouslyPredictedPose = queuedFrame != nil ? lookupDeviceAnchorFor(timestamp: queuedFrame!.timestamp) : nil
             
+            // Report every new frame shown, even if its timestamp repeats: the server
+            // tags frames by guessing which tracking sample SteamVR rendered with
+            // (closest rotation, oldest on ties), so a still head gives many frames one
+            // old timestamp. Skipping repeats left ALVR seeing ~0.1 fps.
             let semaphore = inFlightSemaphore
+            let reportSubmit = isNewFrame
             commandBuffer.addCompletedHandler { (_ commandBuffer)-> Swift.Void in
-                if queuedFrame != nil && self.lastSubmittedTimestamp != queuedFrame?.timestamp {
+                if reportSubmit, let frame = queuedFrame {
                     // vsync_queue_ns: time from submit to display, about one refresh.
-                    alvr_report_submit(queuedFrame!.timestamp, vsyncTimeNs)
-                    self.lastSubmittedTimestamp = queuedFrame!.timestamp
+                    alvr_report_submit(frame.timestamp, vsyncTimeNs)
+                    self.lastSubmittedTimestamp = frame.timestamp
                 }
                 semaphore.signal()
             }
@@ -334,6 +370,11 @@ final class Renderer {
             
             lastIpd = 0.063 // What is it
         } else {
+            idrRequested = false
+            objc_sync_enter(frameQueueLock)
+            frameQueue.removeAll()
+            lastQueuedFrame = nil
+            objc_sync_exit(frameQueueLock)
             vtDecompressionSession = nil
             videoFormat = nil
             lastRequestedTimestamp = 0
@@ -368,175 +409,109 @@ final class Renderer {
         self.renderStarted = isStarted
     }
     
-    // Poll for NALs and and, when decoded, add them to the frameQueue
-        func handleNals() {
-            timeLastFrameGot = CACurrentMediaTime()
-            
-            // Prevent NAL buildup
-            if !renderStarted {
-                VideoHandler.abandonAllPendingNals()
+    /// Set from any thread to get a key frame: the next NAL is refused, and ALVR
+    /// answers a refused NAL by requesting an IDR and dropping frames until it arrives.
+    var idrRequested = false
+
+    func requestIdr() {
+        idrRequested = true
+    }
+
+    /// ALVR calls this on its video thread for every frame (set up in createDecoder).
+    /// Returns false if the frame wasn't submitted to the decoder.
+    static let decoderInputCallback: @convention(c) (AlvrVideoFrameData) -> Bool = { frame in
+        guard let renderer = Renderer.shared, let buffer = frame.buffer_ptr else { return false }
+        // The buffer is only valid during this call.
+        let nal = Data(bytes: buffer, count: Int(frame.buffer_size))
+        return renderer.handleNal(timestamp: frame.timestamp_ns, nal: nal)
+    }
+
+    /// Decode one frame; when decoded, add it to the frameQueue.
+    func handleNal(timestamp: UInt64, nal: Data) -> Bool {
+        timeLastFrameGot = CACurrentMediaTime()
+        let arrivalNs = Clock.nowNs()
+        guard let vtDecompressionSession = vtDecompressionSession, let videoFormat = videoFormat else {
+            return false
+        }
+
+        objc_sync_enter(frameQueueLock)
+        framesSinceLastIDR += 1
+
+        // Refuse a frame only after a real decoder error. Never for looking "old": the
+        // timestamp is the server's guess of the tracking sample the frame was rendered
+        // with (closest rotation in ~3 s of history, oldest on ties), so with a still
+        // head it can be seconds old. Refusing those forced an IDR every few seconds.
+        if idrRequested {
+            print("Decoder error: asking for a key frame", framesSinceLastDecode, framesSinceLastIDR)
+            // Refusing the frame makes ALVR request an IDR to resume the video feed
+            idrRequested = false
+            framesSinceLastIDR = 0
+            framesSinceLastDecode = 0
+            objc_sync_exit(frameQueueLock)
+            return false
+        }
+        objc_sync_exit(frameQueueLock)
+
+        let startedDecodeTime = CACurrentMediaTime()
+
+        return VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat) { [self] imageBuffer in
+            guard let imageBuffer = imageBuffer else {
                 return
             }
-            
-            while renderStarted {
-                guard let (timestamp, viewParams, nal) = VideoHandler.pollNal() else {
-                    break
-                }
-                
-                objc_sync_enter(frameQueueLock)
-                framesSinceLastIDR += 1
 
-                // If we're receiving NALs timestamped from >400ms ago, stop decoding them
-                // to prevent a cascade of needless decoding lag
-                let ns_diff_from_last_req_ts = lastRequestedTimestamp > timestamp ? lastRequestedTimestamp &- timestamp : 0
-                let lagSpiked = (ns_diff_from_last_req_ts > 1000*1000*600 && framesSinceLastIDR > 90*2)
-                
-                if CACurrentMediaTime() - stutterSampleStart >= 60.0 {
-                    print("Stuttter events in the last minute:", stutterEventsCounted)
-                    stutterSampleStart = CACurrentMediaTime()
-                    
-                    if stutterEventsCounted >= 50 {
-                        print("AWDL detected!")
-//                        if ALVRClientApp.gStore.settings.dontShowAWDLAlertAgain {
-//                            print("User doesn't want to see the alert.")
-//                        }
-//                        else {
-//                            DispatchQueue.main.async {
-//                                if self.awdlAlertPresented {
-//                                    return
-//                                }
-//                                self.awdlAlertPresented = true
-//                                
-//                                // Not super kosher but I don't see another way.
-//                                // ALVRClientApp.shared.openWindow(id: "AWDLAlert")
-//                            }
-//                        }
-                    }
-                    
-                    stutterEventsCounted = 0
-                }
-                if ns_diff_from_last_req_ts > 1000*1000*40 {
-                    if (CACurrentMediaTime() - lastStutterTime > 0.25 && CACurrentMediaTime() - lastStutterTime < 10.0) || ns_diff_from_last_req_ts > 1000*1000*100 {
-                        stutterEventsCounted += 1
-                        //print(ns_diff_from_last_req_ts, CACurrentMediaTime() - lastStutterTime)
-                    }
-                    lastStutterTime = CACurrentMediaTime()
-                }
-                // TODO: adjustable framerate
-                // TODO: maybe also call this if we fail to decode for too long.
-                if lastRequestedTimestamp != 0 && (lagSpiked || framesSinceLastDecode > 90*2) {
-                    objc_sync_exit(frameQueueLock)
-
-                    print("Handle spike!", framesSinceLastDecode, framesSinceLastIDR, ns_diff_from_last_req_ts)
-
-                    // We have to request an IDR to resume the video feed
-                    VideoHandler.abandonAllPendingNals()
-                    alvr_request_idr()
-                    framesSinceLastIDR = 0
-                    framesSinceLastDecode = 0
-
-                    continue
-                }
-                objc_sync_exit(frameQueueLock)
-                
-                let startedDecodeTime = CACurrentMediaTime()
-
-                if let vtDecompressionSession = vtDecompressionSession {
-                    VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!) { [self] imageBuffer in
-                        guard let imageBuffer = imageBuffer else {
-                            return
-                        }
-                        
-                        if (CACurrentMediaTime() - startedDecodeTime > Double(50*MSEC_PER_SEC)) {
-                            objc_sync_enter(frameQueueLock)
-
-                            print("Handle decode overrun!", CACurrentMediaTime() - startedDecodeTime, framesSinceLastDecode, framesSinceLastIDR, ns_diff_from_last_req_ts)
-
-                            // We have to request an IDR to resume the video feed
-                            VideoHandler.abandonAllPendingNals()
-                            alvr_request_idr()
-                            framesSinceLastIDR = 0
-                            framesSinceLastDecode = 0
-                            objc_sync_exit(frameQueueLock)
-
-                            return
-                        }
-                        
-                        //print(timestamp, (CACurrentMediaTime() - timeLastFrameDecoded) * 1000.0)
-                        timeLastFrameDecoded = CACurrentMediaTime()
-
-                        //let imageBufferPtr = Unmanaged.passUnretained(imageBuffer).toOpaque()
-                        //print("finish decode: \(timestamp), \(imageBufferPtr), \(nal_type)")
-
-                        objc_sync_enter(frameQueueLock)
-                        framesSinceLastDecode = 0
-                        if frameQueueLastTimestamp != timestamp || true
-                        {
-                            alvr_report_frame_decoded(timestamp)
-
-                            // TODO: For some reason, really low frame rates seem to decode the wrong image for a split second?
-                            // But for whatever reason this is fine at high FPS.
-                            // From what I've read online, the only way to know if an H264 frame has actually completed is if
-                            // the next frame is starting, so keep this around for now just in case.
-                            if frameQueueLastImageBuffer != nil {
-                                //frameQueue.append(QueuedFrame(imageBuffer: frameQueueLastImageBuffer!, timestamp: frameQueueLastTimestamp))
-                                frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp, viewParams: viewParams))
-                            }
-                            else {
-                                frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp, viewParams: viewParams))
-                            }
-                            if frameQueue.count > 3 {
-                                frameQueue.removeFirst()
-                            }
-
-
-                            frameQueueLastTimestamp = timestamp
-                            frameQueueLastImageBuffer = imageBuffer
-                            timeLastFrameSent = CACurrentMediaTime()
-                        }
-
-                        // Pull the very last imageBuffer for a given timestamp
-                        if frameQueueLastTimestamp == timestamp {
-                            frameQueueLastImageBuffer = imageBuffer
-                        }
-
-                        objc_sync_exit(frameQueueLock)
-                    }
-                } else {
-                    alvr_report_frame_decoded(timestamp)
-                    alvr_report_compositor_start(timestamp)
-                    alvr_report_submit(timestamp, 0)
-                }
+            if (CACurrentMediaTime() - startedDecodeTime > Double(50*MSEC_PER_SEC)) {
+                print("Handle decode overrun!", CACurrentMediaTime() - startedDecodeTime, framesSinceLastDecode, framesSinceLastIDR)
+                requestIdr()
+                return
             }
+
+            timeLastFrameDecoded = CACurrentMediaTime()
+
+            objc_sync_enter(frameQueueLock)
+            framesSinceLastDecode = 0
+            alvr_report_frame_decoded(timestamp)
+
+            frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp, arrivalNs: arrivalNs))
+            if frameQueue.count > 3 {
+                frameQueue.removeFirst()
+            }
+            frameQueueLastTimestamp = timestamp
+            frameQueueLastImageBuffer = imageBuffer
+            timeLastFrameSent = CACurrentMediaTime()
+            objc_sync_exit(frameQueueLock)
         }
-    
+    }
+
     func createDecoder() {
-        // Don't reinstantiate the decoder if it's already created.
+        // ALVR sends the config once per connection; ignore repeats.
         // TODO: Switching from H264 -> HEVC at runtime?
         if vtDecompressionSession != nil {
-            handleNals()
             return
         }
-        
-        while true {
-            guard let (_, _, nal) = VideoHandler.pollNal() else {
-                fatalError("create decoder: failed to poll nal?!")
-                break
-            }
-            //print(nal.count, timestamp)
-            NSLog("%@", nal as NSData)
-            let val = (nal[4] & 0x7E) >> 1
-            print("NAL type of \(val)")
-            if (nal[3] == 0x01 && nal[4] & 0x1f == H264_NAL_TYPE_SPS) || (nal[2] == 0x01 && nal[3] & 0x1f == H264_NAL_TYPE_SPS) {
-                // here we go!
-                (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: H264_NAL_TYPE_SPS)
-                break
-            } else if (nal[3] == 0x01 && (nal[4] & 0x7E) >> 1 == HEVC_NAL_TYPE_VPS) || (nal[2] == 0x01 && (nal[3] & 0x7E) >> 1 == HEVC_NAL_TYPE_VPS) {
-                // The NAL unit type is 32 (VPS)
-                (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: HEVC_NAL_TYPE_VPS)
-                break
-            }
+
+        // The codec config: SPS + PPS (H.264) or VPS + SPS + PPS (HEVC), Annex B.
+        let configSize = Int(alvr_get_decoder_config(nil))
+        guard configSize > 5 else {
+            print("create decoder: no decoder config")
+            return
         }
+        var configBytes = [CChar](repeating: 0, count: configSize)
+        alvr_get_decoder_config(&configBytes)
+        let nal = Data(bytes: configBytes, count: configSize)
+        NSLog("%@", nal as NSData)
+        if (nal[3] == 0x01 && nal[4] & 0x1f == H264_NAL_TYPE_SPS) || (nal[2] == 0x01 && nal[3] & 0x1f == H264_NAL_TYPE_SPS) {
+            (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: H264_NAL_TYPE_SPS)
+        } else if (nal[3] == 0x01 && (nal[4] & 0x7E) >> 1 == HEVC_NAL_TYPE_VPS) || (nal[2] == 0x01 && (nal[3] & 0x7E) >> 1 == HEVC_NAL_TYPE_VPS) {
+            // The NAL unit type is 32 (VPS)
+            (vtDecompressionSession, videoFormat) = VideoHandler.createVideoDecoder(initialNals: nal, codec: HEVC_NAL_TYPE_VPS)
+        } else {
+            print("create decoder: unknown config NAL type \((nal[4] & 0x7E) >> 1)")
+            return
+        }
+
+        // Start receiving frames; this also asks the server for a key frame.
+        renderStarted = true
+        alvr_set_decoder_input_callback(nil, Renderer.decoderInputCallback)
     }
     
     func updateFrameStats() {
@@ -550,68 +525,6 @@ final class Renderer {
         }
         
         currentFps += 1
-    }
-    
-    func updateFrame() {
-        if !renderStarted {
-            renderStarted = true
-        }
-        
-        handleNals()
-//        while true {
-//            guard let (nal, timestamp) = VideoHandler.pollNal() else {
-//                break
-//            }
-//            
-//            framesSinceLastIDR += 1
-//            
-//            // Don't submit NALs for decoding if we have already decoded a later frame
-//            objc_sync_enter(frameQueueLock)
-//            if timestamp < frameQueueLastTimestamp {
-//                //print("Skip:", timestamp, frameQueueLastTimestamp)
-//                //objc_sync_exit(frameQueueLock)
-//                //break
-//            }
-//            
-//            // If we're receiving NALs timestamped from >400ms ago, stop decoding them
-//            // to prevent a cascade of needless decoding lag
-//            let ns_diff_from_last_req_ts = lastRequestedTimestamp > timestamp ? lastRequestedTimestamp &- timestamp : 0
-//            let lagSpiked = (ns_diff_from_last_req_ts > 1000*1000*600 && framesSinceLastIDR > 90*2)
-//            // TODO: adjustable framerate
-//            // TODO: maybe also call this if we fail to decode for too long.
-//            if lastRequestedTimestamp != 0 && (lagSpiked || framesSinceLastDecode > 90*2) {
-//                objc_sync_exit(frameQueueLock)
-//                                    
-//                print("Handle spike!", framesSinceLastDecode, framesSinceLastIDR, ns_diff_from_last_req_ts)
-//                                    
-//                // We have to request an IDR to resume the video feed
-//                VideoHandler.abandonAllPendingNals()
-//                alvr_request_idr()
-//                framesSinceLastIDR = 0
-//                framesSinceLastDecode = 0
-//                                    
-//                continue
-//            }
-//            objc_sync_exit(frameQueueLock)
-//            
-//            if let vtDecompressionSession = vtDecompressionSession {
-//                VideoHandler.feedVideoIntoDecoder(decompressionSession: vtDecompressionSession, nals: nal, timestamp: timestamp, videoFormat: videoFormat!) { [weak self] imageBuffer in
-//                    guard let imageBuffer = imageBuffer else {
-//                        return
-//                    }
-//                    
-//                    self?.processFrame(imageBuffer: imageBuffer)
-//                    self?.updateFrameStats()
-//                }
-//            } else {
-//                print("WARN: vtDecompressionSession is nil!")
-//                // TODO(zhuowei): hax
-//                // OR NOT? (kotleni)
-//                alvr_report_frame_decoded(timestamp)
-//                alvr_report_compositor_start(timestamp)
-//                alvr_report_submit(timestamp, 0)
-//            }
-//        }
     }
     
     func processFrame(imageBuffer: CVImageBuffer) {
@@ -658,8 +571,9 @@ final class Renderer {
         renderEncoder.label = "Lens pass (stream)"
         renderEncoder.setRenderPipelineState(videoFramePipelineState)
 
-        // The frame comes back with the eye poses and FOVs it was rendered for (what
-        // sendTracking sent for its timestamp). Fall back to our own FOV if they're unset.
+        // The frame comes back with the eye poses and FOVs it was rendered for (the head
+        // sendTracking sent for its timestamp, plus the eye views). Fall back to our own
+        // FOV if they're unset.
         let displayHead = EventHandler.shared.headToWorld(at: Renderer.nextDisplayTime()) ?? matrix_identity_float4x4
         let views = queuedFrame.viewParams
         let o = views[0].pose.orientation

@@ -10,5 +10,4 @@ import Foundation
 protocol EventHandlerDelegate {
     func updateStreamingState(isStarted: Bool)
     func createDecoder()
-    func updateFrame()
 }
