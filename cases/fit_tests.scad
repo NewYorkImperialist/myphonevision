@@ -36,7 +36,7 @@ imu = [21.0, 16.5];
 joy_hole = 28;                // controller.scad defaults (Adafruit 512)
 joy_post = [30.5, 30.5];
 joy_depth = 15.5;             // plate's top face to the board's top surface, like the controller head
-button_sizes = [5, 6, 7, 8, 10, 12, 16];
+button_sizes = [14.9, 15.1, 15.3, 15.5, 15.7];  // panel-mount button, 14.84 thread: controller.scad uses 15.34
 seat_clearances = [0.1, 0.3, 0.5, 0.7];
 strap_sizes = [25, 32, 40, 52];
 
