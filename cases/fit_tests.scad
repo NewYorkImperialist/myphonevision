@@ -26,16 +26,17 @@ part = "all";
 lens_d = 25.0;
 lens_thk = 6.0;
 phone_h = 71.5;               // iPhone 16 Pro short edge
-phone_t = 8.25;               // iPhone 16 Pro thickness (body, without the camera bump)
-cam_bar_h = 4.35;             // camera bump protrusion past the back
+phone_t = 8.95;               // iPhone 16 Pro thickness (body, without the camera bump), measured
+cam_bar_h = 3.65;             // camera bump past the back: 12.6 total at the bump - phone_t
 clear = 0.6;                  // headset.scad phone clearance per side
 lip = 2.0;
 battery = [62.0, 58.0, 16.0];
-devkit = [55.0, 28.5];
+devkit = [51.5, 28.23];       // controller.scad, measured
 imu = [21.0, 16.5];
-joy_hole = 28;                // controller.scad defaults (Adafruit 512)
-joy_post = [30.0, 30.0];
-button_sizes = [5, 6, 7, 8, 10, 12, 16];
+joy_hole = 25.8;              // controller.scad values (Adafruit 512), after the first fit test print
+joy_post = [30.5, 30.5];
+joy_depth = 15.9;             // plate's top face to the board's top surface, like the controller head (13.5 mm posts)
+button_sizes = [14.9, 15.1, 15.3, 15.5, 15.7];  // panel-mount button, 14.84 thread: controller.scad uses 15.34
 seat_clearances = [0.1, 0.3, 0.5, 0.7];
 strap_sizes = [25, 32, 40, 52];
 
@@ -132,7 +133,7 @@ module joystick() {
   }
   for (dx = [-1, 1], dy = [-1, 1])
     translate([dx * joy_post[0] / 2, dy * joy_post[1] / 2, t - 0.01])
-      difference() { cylinder(d = 5, h = 8); cylinder(d = 2.8, h = 9); }
+      difference() { cylinder(d = 5, h = joy_depth - t); cylinder(d = 2.8, h = joy_depth); }
 }
 
 // Strap ears with several slot widths.

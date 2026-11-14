@@ -15,16 +15,25 @@
 part = "assembly";
 
 // ---- Measure the real parts and adjust ----------------------------------------------
-devkit = [55.0, 28.5];        // DevKitC board outline
+devkit = [51.5, 28.23];       // ESP32 board outline, measured (length x width)
 devkit_h = 22;                // board + headers + wires, front-to-back depth needed
 battery = [62.0, 58.0, 16.0]; // 4xAA holder
-joy_board = [38.1, 38.1];     // Adafruit 512 thumb joystick breakout (1.5 in square)
-joy_hole = 28;                // opening the stick moves in; measure the knob's travel
-joy_post = [30.0, 30.0];      // mounting-hole spacing (x, y): ~30 mm per a retailer; measure
+joy_board = [38.1, 38.1];     // Adafruit 512 breakout, measured 38.08 square, 1.6 thick
+joy_hole = 25.8;              // opening the stick moves in: 28 less 8% after the fit test print. At least
+                              // housing + 1 (the stick stays within the housing); the knob covers it
+joy_housing = 19.96;          // measured: width of the stick's housing on the board
+joy_knob_d = 26;              // measured: knob's outer diameter; it sits just above the top face
+joy_post = [30.5, 30.5];      // mounting-hole spacing, center to center: measured 27.4 inner gap + 3.16 hole
 joy_post_bore = 2.8;          // M3 screws thread into the printed posts
-joy_depth = 12;               // board underside to head top (sets post height)
-button_d = 7.0;               // hole for each push button (cap or plunger)
-button_body = 12.0;           // button body footprint under the top (12 mm tactile; 6 for small ones)
+joy_depth = 15.9;             // head's outer top face down to the board's top surface: 13.5 mm posts + top_t,
+                              // from two fit test prints. Measured from the board: housing top 12.26 (1.1 under
+                              // the top's inside), knob rim 17.42 (1.5 above the top face, knob on, centered).
+// Panel-mount push buttons (red cap, threaded body, nut inside): measured.
+button_thread = 14.84;        // threaded body diameter
+button_d = button_thread + 0.5; // hole for the threads (PLA holes print a little small)
+button_body = 19.19;          // widest part: the ring under the cap, which sits on the outside
+button_depth = 14.46;         // bottom of the ring to the solder tab tips
+button_wires = 3;             // room for the wires soldered to the tabs
 fsr_d = 19.0;                 // FSR pad diameter (FSR 402 is ~18 mm)
 fsr_tail_w = 8;               // FSR ribbon tail width
 usb_slot = [12, 8];
@@ -50,21 +59,29 @@ module rbox(size, rad) {
 
 // Head, modeled top face at z = 0 (print orientation), open toward +z.
 // Thumb layout on the top face: the joystick board fills the left side, the
-// buttons stand in a column to its right (B top, A middle, system bottom).
+// buttons stand in a column to its right (B top, A middle, system bottom),
+// rings 2 mm apart.
 joy_c = [wall + 2 + joy_board[0] / 2, head_outer[1] / 2];
-btn_x = joy_c[0] + joy_board[0] / 2 + 3 + button_body / 2;
-btn_b = [btn_x, head_outer[1] * 0.75];
-btn_a = [btn_x, head_outer[1] * 0.50];
-btn_sys = [btn_x, head_outer[1] * 0.25];
+btn_pitch = button_body + 2;
+btn_x = joy_c[0] + joy_board[0] / 2 + 1 + button_body / 2;
+btn_b = [btn_x, head_outer[1] / 2 + btn_pitch];
+btn_a = [btn_x, head_outer[1] / 2];
+btn_sys = [btn_x, head_outer[1] / 2 - btn_pitch];
 
 // Layout checks: buttons clear of the joystick board and of each other, and
-// everything inside the head's walls.
+// everything inside the head's walls. (The ring is the widest part; the nut
+// inside is no wider.)
 assert(btn_x + button_body / 2 <= head_outer[0] - wall,
        "buttons don't fit beside the joystick board: widen the head or use smaller buttons");
-assert(head_outer[1] * 0.25 >= button_body + 1, "button bodies overlap: use smaller buttons");
+assert(head_outer[1] / 2 - btn_pitch - button_body / 2 >= wall,
+       "the button column is taller than the head: use smaller buttons or move one");
+assert(button_depth + button_wires <= head_outer[2] - rail_h - battery[2],
+       "buttons reach the battery: make the head deeper");
 assert(joy_c[1] - joy_board[1] / 2 >= wall && joy_c[1] + joy_board[1] / 2 <= head_outer[1] - wall,
        "joystick board taller than the head");
 assert(joy_post[0] < joy_board[0] && joy_post[1] < joy_board[1], "joystick posts outside its board");
+assert(joy_hole >= joy_housing + 1, "joystick hole narrower than the stick's travel (housing width + 1)");
+assert(joy_depth - top_t >= 12.26 + 0.5, "joystick housing (12.26 tall) hits the inside of the top: raise joy_depth");
 
 module head() {
   difference() {
