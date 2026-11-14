@@ -82,3 +82,10 @@ def test_pitch_trim_raises_the_nose():
     level = Q.mul(Q.conj(IMU_TO_VR), Q.conj(MOUNTS["flat-x-forward"]))  # untrimmed: level
     fwd = Q.rotate(o.raw(level), (0, 0, -1))
     assert abs(math.degrees(math.asin(fwd[1])) - 20) < 1e-6
+
+
+def test_hub_is_told_apart_by_its_frames():
+    from myphonevision_bridge.preflight import hands_seen
+    stream = b"\x00boot text\r\n" + P.frame(controller_bytes(hand=0)) + P.frame(controller_bytes(hand=1))
+    assert hands_seen(stream) == {0, 1}
+    assert hands_seen(b"stick raw    0    0 | trigger raw    0 (  0%)\r\n") == set()

@@ -73,13 +73,15 @@ class UdpSource:
 def find_hub_port() -> str:
     from serial.tools import list_ports
 
-    candidates = [p for p in list_ports.comports()
-                  if any(k in (p.description or "") + (p.manufacturer or "")
-                         for k in ("CP210", "Silicon Labs", "CH340", "CH910", "USB-SERIAL", "UART"))]
-    if len(candidates) != 1:
-        listing = "\n".join(f"  {p.device}: {p.description}" for p in list_ports.comports())
-        sys.exit(f"Pass --serial PORT; couldn't pick the hub automatically. Ports:\n{listing}")
-    return candidates[0].device
+    from .preflight import find_hubs
+
+    ports, hubs = find_hubs()
+    if len(hubs) == 1:
+        return next(iter(hubs))
+    if not hubs and len(ports) == 1:
+        return ports[0]  # a silent hub: no controller is on yet
+    listing = "\n".join(f"  {p.device}: {p.description}" for p in list_ports.comports())
+    sys.exit(f"Pass --serial PORT; couldn't pick the hub automatically. Ports:\n{listing}")
 
 
 # --- Haptics from VMT -----------------------------------------------------------

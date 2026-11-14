@@ -12,6 +12,7 @@ import socket
 import sys
 import time
 
+from . import protocol as P
 from . import vmt as V
 
 SLIMEVR_GUI_PORT = 21110  # SlimeVR server's websocket for its GUI
@@ -27,23 +28,58 @@ def report(status: str, what: str, hint: str = "") -> None:
     print(line)
 
 
+USB_SERIAL_KEYS = ("CP210", "Silicon Labs", "CH340", "CH910", "USB-SERIAL", "UART")
+
+
+def hands_seen(data: bytes) -> set[int]:
+    """Hands with at least one valid controller frame in raw hub output."""
+    return {p.hand for p in map(P.parse_controller, P.FrameDecoder().feed(data)) if p}
+
+
+def find_hubs(seconds: float = 1.5) -> tuple[list[str], dict[str, set[int]]]:
+    """USB-serial ports, and which of them stream controller frames (hand numbers seen).
+
+    Controllers and the hub use the same USB chips, so only the traffic tells them apart.
+    A hub with no controller switched on is silent and can't be told apart either.
+    """
+    import serial
+    from serial.tools import list_ports
+
+    ports = [p.device for p in list_ports.comports()
+             if any(k in (p.description or "") + (p.manufacturer or "") for k in USB_SERIAL_KEYS)]
+    hubs: dict[str, set[int]] = {}
+    for dev in ports:
+        try:
+            with serial.Serial(dev, 921600, timeout=0.1) as s:
+                end, data = time.monotonic() + seconds, b""
+                while time.monotonic() < end:
+                    data += s.read(4096)
+        except serial.SerialException:
+            continue
+        if seen := hands_seen(data):
+            hubs[dev] = seen
+    return ports, hubs
+
+
 def check_hub() -> None:
     try:
-        from serial.tools import list_ports
+        ports, hubs = find_hubs()
     except ImportError:
         report("FAIL", "pyserial not installed", "pip install -e bridge/")
         return
-    ports = [p for p in list_ports.comports()
-             if any(k in (p.description or "") + (p.manufacturer or "")
-                    for k in ("CP210", "Silicon Labs", "CH340", "CH910", "USB-SERIAL", "UART"))]
-    if len(ports) == 1:
-        report("OK", f"ESP-NOW hub on {ports[0].device} ({ports[0].description})")
-    elif ports:
-        names = ", ".join(p.device for p in ports)
-        report("WARN", f"several USB-serial devices: {names}",
-               "unplug tracker boards from the laptop, or pass --serial to the bridge")
-    else:
+    if not ports:
         report("FAIL", "no ESP-NOW hub found", "plug the hub DevKitC into the laptop (data cable)")
+    elif len(hubs) == 1:
+        dev, seen = next(iter(hubs.items()))
+        names = " and ".join(n for h, n in ((0, "left"), (1, "right")) if h in seen)
+        report("OK", f"ESP-NOW hub on {dev}, receiving {names}")
+    elif hubs:
+        report("WARN", f"controller packets on several ports: {', '.join(hubs)}",
+               "pass --serial to the bridge with the hub's port")
+    else:
+        report("WARN", f"no controller packets on {', '.join(ports)}",
+               "switch a controller on; if still nothing, the board on USB is a controller, "
+               "not the hub (or the port is busy: close pio device monitor)")
 
 
 def check_vmt_alive(timeout: float = 3.0) -> None:

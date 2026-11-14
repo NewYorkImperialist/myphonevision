@@ -1,8 +1,8 @@
 """OSC messages for Virtual Motion Tracker (VMT).
 
 Every message starts with (index, enable-or-input-index, timeoffset). Poses use
-/VMT/Raw/Driver (raw driver space), which needs no room matrix; /VMT/Room/*
-would be rejected until one is set.
+/VMT/Raw/Driver (raw driver space), which ignores the room matrix's value. VMT still rejects
+every pose until a room matrix has been set once (VMT Manager, or tools/linux/vmt.sh).
 """
 
 from __future__ import annotations
