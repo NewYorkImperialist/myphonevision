@@ -3,6 +3,10 @@
 //   head       top shell: joystick and the A button; print top-face down
 //   head_base  plate under the head with the socket the handle plugs into
 //   handle     grip holding the DevKitC; FSR trigger on the front
+//   handle_fit TEST, print this first and alone (~20 min): a 10 mm slice of the
+//              handle and a ring of the head_base socket. Push the ESP32 (plugs
+//              on) into the slice, then the slice into the ring. Both should go
+//              in by hand without forcing. Then print the real parts.
 //   assembly   everything in place (don't print)
 //
 // As built (issue #2, docs/wiring.md step 2h): one button (A) per controller;
@@ -14,7 +18,7 @@
 // USB end down, reachable through the slot in the handle's bottom.
 // Glue or zip-tie the handle into the socket once the wiring works.
 // The same shell works for both hands.
-// Print in PLA, 0.2 mm layers, no supports.
+// Print in PLA, 0.2 mm layers, no supports. Print one file at a time, handle_fit first.
 
 part = "assembly";
 
@@ -141,6 +145,19 @@ module handle() {
   }
 }
 
+// Fit test: same cross-sections as handle() and head_base()'s socket, 10 mm tall.
+module handle_fit() {
+  h = 10;
+  difference() {
+    rbox([handle_outer[0], handle_outer[1], h], 2);
+    translate([wall, wall, -1]) cube([handle_inner[0], handle_inner[1], h + 2]);
+  }
+  translate([handle_outer[0] + 8, -wall - fit, 0]) difference() {
+    rbox([handle_outer[0] + 2 * wall + 2 * fit, handle_outer[1] + 2 * wall + 2 * fit, h], 3);
+    translate([wall, wall, -1]) rbox([handle_outer[0] + 2 * fit, handle_outer[1] + 2 * fit, h + 2], 2);
+  }
+}
+
 module assembly() {
   hz = handle_outer[2];
   color("lightblue") handle();
@@ -160,4 +177,5 @@ if (part == "assembly") assembly();
 else if (part == "head") head();
 else if (part == "head_base") head_base();
 else if (part == "handle") handle();
+else if (part == "handle_fit") handle_fit();
 else assert(false, str("unknown part: ", part));
