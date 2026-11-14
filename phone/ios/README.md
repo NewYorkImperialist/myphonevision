@@ -48,13 +48,27 @@ How the stream path works (ALVR v21 API): every display refresh, `EventHandler.s
 4. On the phone: Start. **The iPhone won't appear in the dashboard by itself:** ALVR's discovery is mDNS multicast, and iOS blocks that without the `com.apple.developer.networking.multicast` entitlement, which a free Apple ID can't get. In the dashboard, use **Add device manually** with the hostname shown in the phone's lobby (e.g. `4119.client.local.`) and the phone's IP. The server then connects to the phone (TCP 9943, video on UDP 9944) and SteamVR starts streaming; the screen shows SteamVR Home through the lens pass.
 5. If it doesn't connect: same ALVR version on both sides? Windows firewall allowing ALVR on private networks? The phone app's lobby shows the hostname it advertises.
 
-## Milestone 5: USB link (optional)
+## Milestone 5: USB link
 
-An iPhone's **Personal Hotspot over USB** gives the laptop a wired network to the phone, like the Pixel's USB tethering. Untested:
-- Windows needs Apple's drivers: the **Apple Devices** app (Microsoft Store) or iTunes.
-- On the phone: Settings → Personal Hotspot → **Allow Others to Join** on. The carrier plan has to allow hotspot; the cellular data itself isn't used.
-- Plug in, tap **Trust** on the phone. Windows should show a new "Apple Mobile Device Ethernet" adapter with a 172.20.10.x address. Then start the app as usual; ALVR finds it over that network.
-- If hotspot isn't available, stay on the laptop's Wi-Fi hotspot.
+An iPhone's **Personal Hotspot over USB** gives the laptop a wired network to the phone, like the Pixel's USB tethering. It avoids venue Wi-Fi and the iPhone's AWDL (Apple's peer-to-peer Wi-Fi, which makes streams stutter every few seconds). ALVR's client listens on every interface (TCP 9943 control, 9944 video), so nothing in ALVR changes; the server just connects to the phone's hotspot address.
+
+**Phone:**
+1. Settings → Personal Hotspot → **Allow Others to Join** on. The carrier plan has to allow hotspot; no cellular data is used for the stream.
+2. **Turn Wi-Fi off** on the phone, so nothing goes over the air.
+3. Plug the phone into the laptop and tap **Trust**.
+4. Open the app. The lobby's "Add this phone in the ALVR dashboard" section lists the **hostname** and a **USB / Personal Hotspot** address, usually `172.20.10.1`. If it isn't there, the hotspot isn't up yet: toggle Allow Others to Join, or re-plug.
+
+**Linux laptop** (the laptop runs Linux):
+1. The kernel's `ipheth` driver makes the network interface; `usbmuxd` handles pairing. Install them if missing (Ubuntu/Debian: `sudo apt install usbmuxd libimobiledevice-utils`), then `idevicepair pair` and tap Trust on the phone again if asked.
+2. A new wired interface appears (`ip -br addr`: `enx…` or `eth1`) and gets a `172.20.10.x` address by DHCP from the phone. If NetworkManager doesn't bring it up, run `nmcli device connect <interface>`.
+3. Check the link: `ping 172.20.10.1`.
+4. **Turn the laptop's Wi-Fi off** too (or make sure nothing else uses 172.20.10.0/28), so ALVR has only the one route to the phone.
+5. ALVR dashboard → **Add device manually**: the lobby's hostname (e.g. `4119.client.local.`) and `172.20.10.1`. Remove or untrust the old Wi-Fi entry for the same phone, so the server doesn't try the old address.
+6. Start in the phone app. Over this link `ping` should be about 1 ms with no spikes; ALVR's network latency should read about 1–2 ms.
+
+**Windows laptop:** install Apple's drivers (the **Apple Devices** app from the Microsoft Store, or iTunes). After Trust, an "Apple Mobile Device Ethernet" adapter appears with a `172.20.10.x` address; then do steps 4–6 above.
+
+If the carrier blocks hotspot, stay on the laptop's Wi-Fi hotspot.
 
 ## Gotchas
 
