@@ -19,6 +19,7 @@ struct VRSettings {
     var latencyMs: Float = 0           // test mode only: render the room this late, like the stream
     var reprojection: Float = 1        // 1 on, 0 off
     var highRefresh: Float = 1         // 1: 120 Hz display, 0: 60 Hz (cooler)
+    var prediction: Float = 1          // 1: predict the head ahead in time, 0: send/show the current pose
 
     var displayHz: Int { highRefresh > 0.5 ? 120 : 60 }
 
@@ -26,8 +27,8 @@ struct VRSettings {
     static let screenHeightMm: Float = 66.6
     static var current = VRSettings.load()
 
-    private static let keys = ["k1", "k2", "ipdMm", "screenToLensMm", "lensYOffsetMm", "eyeHeightM", "latencyMs", "reprojection", "highRefresh"]
-    private static let paths: [WritableKeyPath<VRSettings, Float>] = [\.k1, \.k2, \.ipdMm, \.screenToLensMm, \.lensYOffsetMm, \.eyeHeightM, \.latencyMs, \.reprojection, \.highRefresh]
+    private static let keys = ["k1", "k2", "ipdMm", "screenToLensMm", "lensYOffsetMm", "eyeHeightM", "latencyMs", "reprojection", "highRefresh", "prediction"]
+    private static let paths: [WritableKeyPath<VRSettings, Float>] = [\.k1, \.k2, \.ipdMm, \.screenToLensMm, \.lensYOffsetMm, \.eyeHeightM, \.latencyMs, \.reprojection, \.highRefresh, \.prediction]
 
     static func load() -> VRSettings {
         var s = VRSettings()
@@ -200,6 +201,7 @@ struct LobbyView: View {
             Section("Head") {
                 SettingSlider(title: "Eye height (m)", value: $vr.eyeHeightM, range: 1.0...2.0, step: 0.05, format: "%.2f")
                 Toggle("Reprojection", isOn: Binding(get: { vr.reprojection > 0.5 }, set: { vr.reprojection = $0 ? 1 : 0 }))
+                Toggle("Head prediction (off: current pose)", isOn: Binding(get: { vr.prediction > 0.5 }, set: { vr.prediction = $0 ? 1 : 0 }))
                 Toggle("120 Hz display (off: 60 Hz, cooler)", isOn: Binding(get: { vr.highRefresh > 0.5 }, set: { vr.highRefresh = $0 ? 1 : 0 }))
                 SettingSlider(title: "Test mode: simulated latency (ms)", value: $vr.latencyMs, range: 0...200, step: 10, format: "%.0f")
             }

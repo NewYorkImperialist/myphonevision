@@ -27,8 +27,6 @@ class EventHandler: ObservableObject {
     private var lastBatteryStateUpdateTime: Int64 = 0
     private var worldTracker: WorldTracker? = nil
     private var alvrEvent: AlvrEvent = AlvrEvent()
-    /// Position in the per-sample rotation tag sawtooth (see sendTracking).
-    private var tagIndex = 0
 
     /// A head pose sent to ALVR, kept so frames can be reprojected from the pose they
     /// were really rendered with when the server's tag is wrong (see Renderer.draw).
@@ -220,7 +218,7 @@ class EventHandler: ObservableObject {
     /// in head space; the eye views are resent only when the IPD or lens FOV changes.
     func sendTracking() {
         // Ask for a frame predicted for when it will be on screen (the measured
-        // pipeline latency); our own extrapolation is capped at 50 ms of that.
+        // pipeline latency). WorldTracker predicts to that time from ARKit + gyro.
         let predictionNs = self.predictionNs
         let targetNs = Clock.nowNs() &+ predictionNs
         guard alvrInitialized,
@@ -241,15 +239,7 @@ class EventHandler: ObservableObject {
             sentViewsKey = viewsKey
         }
 
-        // Make every sample's rotation unique. The server finds the sample a frame was
-        // rendered with by closest rotation among its last 360 (PoseHistory::
-        // GetBestPoseMatch, oldest on ties), and a still head sends identical rotations
-        // (120 Hz sends, 60 Hz ARKit), so frames came back seconds old. A tiny yaw
-        // sawtooth (2e-6 rad steps, 400-sample period, at most 0.05°) gives an exact
-        // match. Reprojection removes it: frames return their rendered pose, tag included.
-        tagIndex = (tagIndex + 1) % 400
-        let tag = simd_quatf(angle: Float(tagIndex) * 2e-6, axis: SIMD3<Float>(0, 1, 0))
-        let q = simd_normalize(simd_quatf(head.rotation3x3) * tag)
+        let q = simd_quatf(head.rotation3x3)
         let p = head.translation
         var motion = AlvrDeviceMotion(
             device_id: MetalView.Coordinator.deviceIdHead,
