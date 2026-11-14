@@ -38,7 +38,8 @@ Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes co
 **Status (Nafis, 2026-11-14 evening):**
 - **Controller parts measured, on `main`** (merge 46eba10). Joystick: hole 25.8 and 13.5 mm posts (`joy_depth` 15.9), after two fit test prints. Panel-mount buttons: thread 14.84, ring 19.19, 14.46 deep. ESP32: 51.5 × 28.23. Jayden's `controller-shells` (A button only, measured battery and FSR, `handle_fit` test) builds on these.
 - **Headset:** the phone slice v2 fits; the phone holder redesign is parked. Lenses are two Carson TriView TV-26, 3 stacked per eye. Jayden's `lens-tubes` (sliding focus tubes) is printing `front`, `tube` and `tube_fit`.
-- **Face foam:** got it. **Strap:** in progress (#9).
+- **Face foam:** got it. **Strap:** a teammate is getting one from a friend (#9); not on Nafis.
+- **Headset vs. Cardboard:** the team may build a Google Cardboard-style viewer instead if the printed headset won't be ready in time. Not decided; if it's Cardboard, the iPhone app's lens defaults change and the tube reprints stop.
 
 1. Lens sizes measured with calipers: ring **38.75**, stack **21.09** (`lens-tubes` 7bd3826). The tube keeps its 41.5 outside, so the printed front still fits; **reprint `tube_fit`, 2 × `tube` and 2 × `lens_ring`** from 7bd3826 (#4). Focal length and phone distance are estimates the focus tubes' travel covers.
 2. Once `tube_fit` slides right, merge `lens-tubes` into `main`.
