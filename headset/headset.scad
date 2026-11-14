@@ -6,6 +6,8 @@
 //   tray       phone tray; print back-down (camera slot on the bed)
 //   door       sliding end door; print flat
 //   shim       focus shim, shim_t thick; print as many as focus needs
+//   spacer     rails that slide in behind the phone (after it's in) to take up
+//              the room left for the camera bar; print flat
 //   lens_ring  press-fit ring that locks a lens (stack) in its seat; print 2
 //   jig        single-lens focus test tube (print this first, ~20 min)
 //   jig_ring   1 mm spacer ring for the jig
@@ -28,6 +30,7 @@ ipd = 63.0;             // lens center spacing
 phone_w = 155.6;        // long edge
 phone_h = 73.2;         // short edge
 phone_t = 8.7;          // body thickness, not counting the camera bar
+cam_bar_h = 2.7;        // how far the camera bar sticks out past the back (measure)
 screen_w = 147.0;
 screen_h = 68.0;
 cam_from_top = 11.0;    // phone top edge to the near edge of the camera bar
@@ -62,7 +65,10 @@ lens_screen = lens_f - focus_back_off;
 lens_center_z = lens_lip + lens_thk / 2;          // lens optical center, from the face
 tray_face_to_screen = lip;                       // screen sits on the lip
 body_len = lens_screen - (plate_t - lens_center_z) - tray_face_to_screen - shim_count * shim_t;
-tray_t = lip + phone_t + clear + wall;
+// The pocket is deep enough for the camera bar to slide through; once the
+// phone is in, the spacer rails fill the gap behind its body.
+pocket_t = phone_t + cam_bar_h + clear;
+tray_t = lip + pocket_t + wall;
 flange = 9;             // corner flange size for bolts / zip ties
 
 // Shrink the nose notch if big lenses would break into it: keep its round tip
@@ -170,7 +176,7 @@ door_x0 = in_w / 2 + 0.2;                  // inner face of the door slot
 door_slot = door_t + 0.4;
 tray_x1 = door_x0 + door_slot + 1.6;       // +X end of the tray
 door_z0 = lip - 1;                         // grooves bite 1 mm into lip and back
-door_len_z = phone_t + clear + 2 - 0.3;
+door_len_z = pocket_t + 2 - 0.3;
 pin_y = H / 2 + 3;
 pin_z = lip + phone_t / 2;
 
@@ -180,10 +186,10 @@ module tray() {
       translate([-W / 2, -H / 2, 0]) cube([tray_x1 + W / 2, H, tray_t]);
       flanges(3);
       // Latch ear on top, just inside the door slot.
-      translate([door_x0 - 7, H / 2 - 0.01, lip]) cube([6.8, 6, phone_t]);
+      translate([door_x0 - 7, H / 2 - 0.01, lip]) cube([6.8, 6, pocket_t]);
     }
     // Phone pocket, open at the +X end.
-    translate([-in_w / 2, -in_h / 2, lip]) cube([tray_x1 + in_w / 2 + 1, in_h, phone_t + clear]);
+    translate([-in_w / 2, -in_h / 2, lip]) cube([tray_x1 + in_w / 2 + 1, in_h, pocket_t]);
     // Screen window through the lip.
     translate([0, 0, -1]) centered_box(screen_w, screen_h, lip + 2);
     // Camera bar slot through the back, full height so the raised bar clears.
@@ -238,8 +244,26 @@ module jig_ring() {
   }
 }
 
+// Two rails along the top and bottom edges of the phone's back plus a
+// crossbar at the USB end, clear of the camera bar and the vents. Modeled in
+// tray coordinates at its installed position.
+spacer_t = cam_bar_h + clear - 0.3;
+spacer_x0 = -in_w / 2 + cam_from_top + cam_bar_len + 1;
+spacer_x1 = in_w / 2 - 0.2;
+rail_w = 9;
+module spacer() {
+  z = lip + phone_t;
+  for (y = [-in_h / 2 + 0.3, in_h / 2 - 0.3 - rail_w])
+    translate([spacer_x0, y, z]) cube([spacer_x1 - spacer_x0, rail_w, spacer_t]);
+  translate([spacer_x1 - 8, -in_h / 2 + 0.3, z]) cube([8, in_h - 0.6, spacer_t]);
+}
+
 module phone_ghost() {
-  color("black", 0.6) translate([-phone_w / 2, -phone_h / 2, 0]) cube([phone_w, phone_h, phone_t]);
+  color("black", 0.6) {
+    translate([-phone_w / 2, -phone_h / 2, 0]) cube([phone_w, phone_h, phone_t]);
+    // Camera bar across the back, near the -X (top) end.
+    translate([-phone_w / 2 + cam_from_top + 1, -phone_h / 2 + 1, phone_t]) cube([cam_bar_len - 2, phone_h - 2, cam_bar_h]);
+  }
 }
 
 module assembly() {
@@ -249,6 +273,7 @@ module assembly() {
   tray_z = stack + shim_count * shim_t;
   color("lightblue") translate([0, 0, tray_z]) tray();
   translate([0, 0, tray_z + lip]) phone_ghost();
+  color("green") translate([0, 0, tray_z]) spacer();
   color("salmon") translate([0, 0, tray_z]) door();
   for (p = lens_pos)
     color("white", 0.5) translate([p[0], p[1], lens_lip]) cylinder(d = lens_d, h = lens_thk);
@@ -259,6 +284,7 @@ else if (part == "front") front();
 else if (part == "tray") tray();
 else if (part == "door") rotate([0, 90, 0]) translate([-door_x0 - 0.2 - door_t, 0, 0]) door();
 else if (part == "shim") shim();
+else if (part == "spacer") translate([0, 0, -(lip + phone_t)]) spacer();
 else if (part == "lens_ring") lens_ring();
 else if (part == "jig") jig();
 else if (part == "jig_ring") jig_ring();

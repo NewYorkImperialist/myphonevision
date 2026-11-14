@@ -6,8 +6,9 @@
 //   lens_seats   rings with seats at lens_d + 0.1 / 0.3 / 0.5 / 0.7 mm: find the
 //                snug one -> adjust lens_d in headset.scad by that clearance
 //   lens_rings   retaining rings at 3 press-fit tightnesses, for the snug seat
-//   phone        10 mm slice of the phone tray: slide the Pixel in to check
-//                width, thickness and the screen lip -> headset.scad clear
+//   phone        10 mm slice of the phone tray: slide the Pixel through it,
+//                camera end first, to check width, thickness, the camera bar
+//                and the screen lip -> headset.scad clear, cam_bar_h
 //   frames       low outline frames for the 4xAA holder, the DevKitC and the
 //                GY-521: drop each part in -> trackers/controller sizes
 //   joystick     the controller's joystick hole and posts: screw the joystick
@@ -25,7 +26,8 @@ part = "all";
 lens_d = 25.0;
 lens_thk = 6.0;
 phone_h = 73.2;               // Pixel 7 short edge
-phone_t = 8.7;                // Pixel 7 thickness
+phone_t = 8.7;                // Pixel 7 thickness (body, without the camera bar)
+cam_bar_h = 2.7;              // camera bar protrusion past the back
 clear = 0.6;                  // headset.scad phone clearance per side
 lip = 2.0;
 battery = [62.0, 58.0, 16.0];
@@ -92,13 +94,16 @@ module lens_rings() {
 }
 
 // Tray cross-section: same pocket and lip as headset.scad's tray, 10 mm long.
+// The pocket includes room for the camera bar: slide the phone through this
+// slice camera end first, the way it goes into the headset.
 module phone() {
   in_h = phone_h + 2 * clear;
   wall = 2.4;
-  depth = lip + phone_t + clear + wall;
+  pocket = phone_t + cam_bar_h + clear;
+  depth = lip + pocket + wall;
   difference() {
     translate([0, -in_h / 2 - wall, 0]) cube([10, in_h + 2 * wall, depth]);
-    translate([-1, -in_h / 2, lip]) cube([12, in_h, phone_t + clear]);   // phone pocket
+    translate([-1, -in_h / 2, lip]) cube([12, in_h, pocket]);   // phone pocket
     translate([-1, -68 / 2, -1]) cube([12, 68, lip + 2]);                // screen window
   }
 }

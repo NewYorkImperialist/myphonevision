@@ -18,11 +18,13 @@ part = "assembly";
 devkit = [55.0, 28.5];        // DevKitC board outline
 devkit_h = 22;                // board + headers + wires, front-to-back depth needed
 battery = [62.0, 58.0, 16.0]; // 4xAA holder
-joy_board = [34.0, 26.0];     // KY-023-style joystick board
-joy_hole = 25;                // opening the stick moves in
-joy_post = [26.0, 19.0];      // joystick mounting-hole spacing (x, y); measure
+joy_board = [38.1, 38.1];     // Adafruit 512 thumb joystick breakout (1.5 in square)
+joy_hole = 28;                // opening the stick moves in; measure the knob's travel
+joy_post = [30.0, 30.0];      // mounting-hole spacing (x, y): ~30 mm per a retailer; measure
+joy_post_bore = 2.8;          // M3 screws thread into the printed posts
 joy_depth = 12;               // board underside to head top (sets post height)
 button_d = 7.0;               // hole for each push button (cap or plunger)
+button_body = 12.0;           // button body footprint under the top (12 mm tactile; 6 for small ones)
 fsr_d = 19.0;                 // FSR pad diameter (FSR 402 is ~18 mm)
 fsr_tail_w = 8;               // FSR ribbon tail width
 usb_slot = [12, 8];
@@ -47,12 +49,22 @@ module rbox(size, rad) {
 }
 
 // Head, modeled top face at z = 0 (print orientation), open toward +z.
-// Thumb layout on the top face: joystick toward the back-left, A / B to the
-// right of it, system below.
-joy_c = [head_outer[0] * 0.38, head_outer[1] * 0.58];
-btn_a = [head_outer[0] * 0.78, head_outer[1] * 0.45];
-btn_b = [head_outer[0] * 0.70, head_outer[1] * 0.70];
-btn_sys = [head_outer[0] * 0.38, head_outer[1] * 0.20];
+// Thumb layout on the top face: the joystick board fills the left side, the
+// buttons stand in a column to its right (B top, A middle, system bottom).
+joy_c = [wall + 2 + joy_board[0] / 2, head_outer[1] / 2];
+btn_x = joy_c[0] + joy_board[0] / 2 + 3 + button_body / 2;
+btn_b = [btn_x, head_outer[1] * 0.75];
+btn_a = [btn_x, head_outer[1] * 0.50];
+btn_sys = [btn_x, head_outer[1] * 0.25];
+
+// Layout checks: buttons clear of the joystick board and of each other, and
+// everything inside the head's walls.
+assert(btn_x + button_body / 2 <= head_outer[0] - wall,
+       "buttons don't fit beside the joystick board: widen the head or use smaller buttons");
+assert(head_outer[1] * 0.25 >= button_body + 1, "button bodies overlap: use smaller buttons");
+assert(joy_c[1] - joy_board[1] / 2 >= wall && joy_c[1] + joy_board[1] / 2 <= head_outer[1] - wall,
+       "joystick board taller than the head");
+assert(joy_post[0] < joy_board[0] && joy_post[1] < joy_board[1], "joystick posts outside its board");
 
 module head() {
   difference() {
@@ -66,7 +78,7 @@ module head() {
     translate([joy_c[0] + dx * joy_post[0] / 2, joy_c[1] + dy * joy_post[1] / 2, top_t - 0.01])
       difference() {
         cylinder(d = 5, h = joy_depth - top_t);
-        cylinder(d = 2.2, h = joy_depth);
+        cylinder(d = joy_post_bore, h = joy_depth);
       }
 }
 
@@ -107,7 +119,9 @@ module handle() {
       cube([usb_slot[0], usb_slot[1], wall + 2]);
     // FSR trigger: shallow round pocket on the front near the top, tail slot into the handle.
     tz = handle_outer[2] - socket_depth - fsr_d / 2 - 4;
-    translate([handle_outer[0] / 2, 0.8, tz]) rotate([-90, 0, 0]) cylinder(d = fsr_d + 0.6, h = wall);
+    // Pocket cut from the outside, leaving a 0.8 mm floor so the pad sits flush
+    // under the finger (the tail slot below also opens outward).
+    translate([handle_outer[0] / 2, -1, tz]) rotate([-90, 0, 0]) cylinder(d = fsr_d + 0.6, h = 1 + wall - 0.8);
     translate([(handle_outer[0] - fsr_tail_w) / 2, -1, tz - fsr_d / 2 - 14]) cube([fsr_tail_w, wall + 2, 14]);
     // Grip button under the middle finger.
     translate([handle_outer[0] / 2, -1, tz - fsr_d / 2 - 22]) rotate([-90, 0, 0]) cylinder(d = button_d, h = wall + 2);
@@ -126,6 +140,8 @@ module assembly() {
 
 echo(str("handle ", handle_outer[0], " x ", handle_outer[1], " mm grip, ", handle_outer[2], " mm long"));
 echo(str("head ", head_outer[0], " x ", head_outer[1], " x ", head_outer[2] + wall, " mm"));
+echo(str("joystick board right edge ", joy_c[0] + joy_board[0] / 2, " mm; button column at x = ", btn_x,
+         " (", btn_x - button_body / 2 - (joy_c[0] + joy_board[0] / 2), " mm gap to the board)"));
 
 if (part == "assembly") assembly();
 else if (part == "head") head();
