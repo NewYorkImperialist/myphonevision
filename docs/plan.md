@@ -7,6 +7,8 @@ Proposal dated 2026-11-13. Build details live in each folder's README; this page
 1. **Windows laptop with a hardware encoder.** ALVR wants NVIDIA GTX 1000+ (NVENC), AMD (AMF) or Intel (VPL); most Intel laptops qualify through their iGPU. VMT is Windows-only, and ALVR's Linux support is partial. If this fails, the fallback is a standalone Android app (Unity + Cardboard XR + ARCore) with controllers over BLE, which drops SteamVR.
 2. **Matched lenses.** 40–50 mm focal length (+20 to +25 D), 25–35 mm diameter, two identical. One person goes on the lens run in hour 1.
 
+**Update:** PR #458 already contains fork change 1 (rotational reprojection), and change 3 needs no code: `tools/cardboard_qr.py` makes a viewer QR code from the headset's measurements. See [phone/README.md](../phone/README.md).
+
 **First light (hour 0–3):** stock PhoneVR against ALVR v20.8.0 over USB, and the PR #458 build against the v21.0.0-dev14 nightly, side by side. Whichever reaches SteamVR Home first wins. Note the latency as the baseline.
 
 ## Team

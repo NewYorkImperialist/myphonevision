@@ -33,6 +33,7 @@ The full plan, parts list and risks are in [docs/plan.md](docs/plan.md).
 | [firmware/slimevr/](firmware/slimevr/) | SlimeVR tracker wiring and config | Body tracking |
 | [tools/windows/](tools/windows/) | adb forwarding and firewall scripts | Phone and streaming |
 | [tools/export-stl.sh](tools/export-stl.sh) | Export every printable part to `build/stl/` | Optics and industrial design |
+| [tools/cardboard_qr.py](tools/cardboard_qr.py) | Headset lens settings as a Cardboard QR code for the phone | Phone and streaming |
 
 ## Quick start
 
@@ -56,5 +57,5 @@ cd bridge && pip install -e . && python -m myphonevision_bridge --debug
 | Bridge | Unit tests and a UDP-to-OSC smoke test pass; not yet run against SteamVR |
 | Headset CAD | Renders and exports cleanly; supports stacked lenses, top strap; not printed; needs lens measurements |
 | Tracker and controller cases | Render and export cleanly; not printed; sizes from datasheets until parts are measured |
-| PhoneVR fork | Not started; `phone/setup.sh` checks out PR #458 |
+| PhoneVR | PR #458 already has reprojection; lens settings come from a generated QR code (`tools/cardboard_qr.py`, checked against Google's Cardboard v2 code); app not yet built |
 | SlimeVR | `firmware/slimevr/build.sh` builds stock SlimeVR v0.7.4 for DevKitC + 2× MPU-6050; not yet flashed |

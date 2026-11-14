@@ -21,13 +21,27 @@ ALVR server settings: **disable ALVR's own controllers**, so the VMT controllers
 
 ## Fork work
 
-Run `./setup.sh` to clone PhoneVR into `phone/PhoneVR` (gitignored) and check out PR #458. PR #458 already moves the client to the ALVR v21 API, adds ARCore 6DoF with a complementary filter, supports Wired mode, and cuts display prediction to 30 ms. That leaves:
+Run `./setup.sh` to clone PhoneVR into `phone/PhoneVR` (gitignored) and check out PR #458. PR #458 moves the client to the ALVR v21 API, adds ARCore 6DoF, its own head-orientation filter (Mahony with gyro-bias estimation) and a seated neck model, supports Wired mode, and cuts display prediction to 30 ms.
 
-1. **Rotational reprojection (highest priority).** `alvr_get_frame` writes each frame's pose into a dummy variable. Keep that pose. At draw time, take the latest Cardboard head pose and compute the rotation delta from the frame's pose. Rotate the eye-pass texture lookup by that delta before Cardboard's distortion pass. About 100–200 lines.
-2. **ARCore head position: tuning only if #458 works.** Keep orientation from the Cardboard tracker (IMU rate) and position from ARCore (30 Hz on the Pixel 7, so predict between frames). Pull Cardboard yaw toward ARCore yaw continuously. Hold the last position when tracking is lost. Add a recenter gesture. Start ARCore only after video is flowing.
-3. **Viewer parameters.** Hard-code this headset's lens separation, screen-to-lens distance, tray-to-lens offset and k1/k2 distortion in place of the QR scan. Tune k1/k2 with a debug slider over a grid, then bake the values in. Get the distances from `headset/headset.scad`'s echo output.
+1. **Rotational reprojection: already in PR #458.** Each refresh, `alvr_main.cpp` computes the rotation between the pose a frame was rendered for and the current head pose (`alvr_rotation_delta`) and passes it to ALVR's renderer as `reprojection_rotation`. When no new frame has arrived, it re-shows the last one, re-rotated. The stock client lacks this. Nothing to write; check that head turns feel instant once the PR build streams.
+2. **ARCore head position: tune only.** Check jitter and drift, that the last position holds when tracking drops, and that recentering works. ARCore starts only after video is flowing (`ARCORE_START_AFTER_VIDEO`).
+3. **Viewer parameters: no code needed.** Scan a viewer QR code generated from the headset's measurements (next section).
 
-When the fork works, push it to a fork of PhoneVR. It stays out of this repo because PhoneVR has its own license and history.
+When the build works, push it to a fork of PhoneVR. It stays out of this repo because PhoneVR has its own license and history.
+
+## Headset QR code (lens settings)
+
+The app's "switch viewer" button scans Cardboard viewer QR codes. `tools/cardboard_qr.py` makes one from the headset's numbers. It encodes the same `https://google.com/cardboard/cfg?p=…` format as Google's own viewer codes, and the phone decodes it offline.
+
+```sh
+pip install segno                                   # for the QR images
+python3 tools/cardboard_qr.py --lens-f 62 --lens-d 45            # one code
+python3 tools/cardboard_qr.py --lens-f 62 --lens-d 45 --k1-sweep 0.1 0.2 0.3 0.4   # tuning set
+```
+
+Use the same `lens_f` and `focus_back_off` as `headset/headset.scad`. The images land in `build/qr/`; open one on a laptop screen and scan it from the phone.
+
+**Tuning distortion (k1, k2):** show a grid in SteamVR (or any straight lines) and scan each code in the sweep. Keep the one where straight lines look straightest: k1 too low makes lines bow outward toward the edges, too high makes them pinch inward. Defaults start from Google's Cardboard v2 values (k1 0.24, k2 0.30). `--decode URL` prints what's inside any viewer code.
 
 ## Thermals
 
