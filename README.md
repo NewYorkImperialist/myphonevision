@@ -1,5 +1,7 @@
 # myphonevision
 
+> **Start here:** [CLAUDE.md](CLAUDE.md) has the current plan, what each teammate does next, and the state of every part. Claude Code reads it automatically when you open this repo.
+
 A SteamVR-native phone headset built for HackUMass. A Pixel 7 is the display and the inside-out 6DoF head tracker, tethered over USB to a Windows GPU laptop running ALVR. Two 3D-printed ESP32 controllers show up in SteamVR as Valve Index controllers through Virtual Motion Tracker (VMT), and a SlimeVR set adds lower-body tracking. Every device registers as a standard SteamVR device, so VRChat, Beat Saber and SteamVR Home run unmodified.
 
 ```
