@@ -17,11 +17,12 @@ total=0
 args=()
 for f in "$@"; do
   [[ -f $f ]] || { echo "not a file: $f" >&2; exit 2; }
-  case "${f,,}" in
+  # tr and wc instead of ${f,,} and stat -c: macOS ships bash 3.2 and BSD stat.
+  case "$(printf '%s' "$f" | tr '[:upper:]' '[:lower:]')" in
     *.stl|*.obj|*.step|*.stp|*.3mf) ;;
     *) echo "the portal won't take $f (3D: .stl .obj .step .stp .3mf)" >&2; exit 2 ;;
   esac
-  total=$(( total + $(stat -c %s "$f") ))
+  total=$(( total + $(wc -c < "$f") ))
   args+=(-F "files[]=@$f")
 done
 (( total <= 95 * 1024 * 1024 )) || { echo "over the portal's 95 MB limit" >&2; exit 2; }
