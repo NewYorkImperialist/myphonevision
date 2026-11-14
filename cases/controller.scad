@@ -19,7 +19,9 @@ devkit = [55.0, 28.5];        // DevKitC board outline
 devkit_h = 22;                // board + headers + wires, front-to-back depth needed
 battery = [62.0, 58.0, 16.0]; // 4xAA holder
 joy_board = [38.1, 38.1];     // Adafruit 512 breakout, measured 38.08 square, 1.6 thick
-joy_hole = 28;                // opening the stick moves in; measure the knob's travel
+joy_hole = 28;                // opening the stick moves in: at least housing + 1 (the stick stays within
+                              // the housing); wide enough for the knob's rim to dip in when tilted
+joy_housing = 19.96;          // measured: width of the stick's housing on the board
 joy_post = [30.5, 30.5];      // mounting-hole spacing, center to center: measured 27.4 inner gap + 3.16 hole
 joy_post_bore = 2.8;          // M3 screws thread into the printed posts
 joy_depth = 15.5;             // head's outer top face down to the board's top surface (sets post height).
@@ -67,6 +69,7 @@ assert(head_outer[1] * 0.25 >= button_body + 1, "button bodies overlap: use smal
 assert(joy_c[1] - joy_board[1] / 2 >= wall && joy_c[1] + joy_board[1] / 2 <= head_outer[1] - wall,
        "joystick board taller than the head");
 assert(joy_post[0] < joy_board[0] && joy_post[1] < joy_board[1], "joystick posts outside its board");
+assert(joy_hole >= joy_housing + 1, "joystick hole narrower than the stick's travel (housing width + 1)");
 
 module head() {
   difference() {
