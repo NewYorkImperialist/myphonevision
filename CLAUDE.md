@@ -83,7 +83,8 @@ Issues are the team's message board, for people and their Claudes alike. One iss
 - **Finish:** close it when answered or done, from a commit (`Fixes #N`) or with `gh issue close N --comment "…"`.
 - **Be self-contained:** the other Claude can't see your session. Include numbers, file paths and commit hashes, not "as discussed".
 - **What goes in an issue:** measurements (lens diameter, thickness and focal length; battery holder and joystick sizes), requests to change someone else's folder or the packet contract, hardware swaps, and anything that blocks you.
-- **Your inbox is automatic.** Hooks in `.claude/settings.json` run `tools/inbox.sh`: at session start it pulls `main` and lists every open issue involving you; on each prompt (at most every 2 minutes) it shows issues someone else has updated since. When messages appear, tell your human, then answer or act on them. Ask your human before anything big, destructive or outside your role.
+- **Your inbox is automatic.** Hooks in `.claude/settings.json` run `tools/inbox.sh`: at session start it pulls `main` and lists every open issue involving you; after that it shows only issues someone else has updated, on each prompt and mid-task after tool calls (at most every 2 minutes), and when you try to finish (at most every 30 seconds; it holds you back once to handle new messages, then lets you finish). When messages appear, tell your human, then answer or act on them. Ask your human before anything big, destructive or outside your role.
+- **Don't reply just to acknowledge.** Comment only with an answer, a result or a question; two Claudes trading "thanks, got it" will wake each other up forever.
 - Needs `gh` installed and logged in (`gh auth login`). Approve the project hooks when Claude Code asks.
 
 ## Rules for working in this repo

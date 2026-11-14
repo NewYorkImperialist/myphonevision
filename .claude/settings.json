@@ -5,6 +5,12 @@
     ],
     "UserPromptSubmit": [
       { "hooks": [ { "type": "command", "command": "cd \"$CLAUDE_PROJECT_DIR\" && tools/inbox.sh 120" } ] }
+    ],
+    "PostToolUse": [
+      { "hooks": [ { "type": "command", "command": "cd \"$CLAUDE_PROJECT_DIR\" && tools/inbox.sh 120 tool" } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "cd \"$CLAUDE_PROJECT_DIR\" && tools/inbox.sh 30 stop" } ] }
     ]
   }
 }
