@@ -35,6 +35,7 @@ devkit = [55.0, 28.5];
 imu = [21.0, 16.5];
 joy_hole = 28;                // controller.scad defaults (Adafruit 512)
 joy_post = [30.5, 30.5];
+joy_depth = 15.5;             // plate's top face to the board's top surface, like the controller head
 button_sizes = [5, 6, 7, 8, 10, 12, 16];
 seat_clearances = [0.1, 0.3, 0.5, 0.7];
 strap_sizes = [25, 32, 40, 52];
@@ -132,7 +133,7 @@ module joystick() {
   }
   for (dx = [-1, 1], dy = [-1, 1])
     translate([dx * joy_post[0] / 2, dy * joy_post[1] / 2, t - 0.01])
-      difference() { cylinder(d = 5, h = 8); cylinder(d = 2.8, h = 9); }
+      difference() { cylinder(d = 5, h = joy_depth - t); cylinder(d = 2.8, h = joy_depth); }
 }
 
 // Strap ears with several slot widths.

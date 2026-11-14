@@ -22,7 +22,9 @@ joy_board = [38.1, 38.1];     // Adafruit 512 breakout, measured 38.08 square, 1
 joy_hole = 28;                // opening the stick moves in; measure the knob's travel
 joy_post = [30.5, 30.5];      // mounting-hole spacing, center to center: measured 27.4 inner gap + 3.16 hole
 joy_post_bore = 2.8;          // M3 screws thread into the printed posts
-joy_depth = 12;               // board underside to head top (sets post height)
+joy_depth = 15.5;             // head's outer top face down to the board's top surface (sets post height).
+                              // Measured from the board: housing top 12.26, knob rim 17.42 (knob on, centered).
+                              // Window: housing + top_t + 0.5 = 15.16 to rim - 1.5 = 15.92.
 button_d = 7.0;               // hole for each push button (cap or plunger)
 button_body = 12.0;           // button body footprint under the top (12 mm tactile; 6 for small ones)
 fsr_d = 19.0;                 // FSR pad diameter (FSR 402 is ~18 mm)
