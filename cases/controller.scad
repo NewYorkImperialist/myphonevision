@@ -19,15 +19,15 @@ devkit = [51.5, 28.23];       // ESP32 board outline, measured (length x width)
 devkit_h = 22;                // board + headers + wires, front-to-back depth needed
 battery = [62.0, 58.0, 16.0]; // 4xAA holder
 joy_board = [38.1, 38.1];     // Adafruit 512 breakout, measured 38.08 square, 1.6 thick
-joy_hole = 28;                // opening the stick moves in: at least housing + 1 (the stick stays within
-                              // the housing); wide enough for the knob's rim to dip in when tilted
+joy_hole = 25.8;              // opening the stick moves in: 28 less 8% after the fit test print. At least
+                              // housing + 1 (the stick stays within the housing); the knob covers it
 joy_housing = 19.96;          // measured: width of the stick's housing on the board
-joy_knob_d = 26;              // measured: knob's outer diameter (it tilts down into the hole)
+joy_knob_d = 26;              // measured: knob's outer diameter; it sits just above the top face
 joy_post = [30.5, 30.5];      // mounting-hole spacing, center to center: measured 27.4 inner gap + 3.16 hole
 joy_post_bore = 2.8;          // M3 screws thread into the printed posts
-joy_depth = 15.5;             // head's outer top face down to the board's top surface (sets post height).
-                              // Measured from the board: housing top 12.26, knob rim 17.42 (knob on, centered).
-                              // Window: housing + top_t + 0.5 = 15.16 to rim - 1.5 = 15.92.
+joy_depth = 16.9;             // head's outer top face down to the board's top surface: 14.5 mm posts + top_t,
+                              // from the fit test print. Measured from the board: housing top 12.26 (2.2 under
+                              // the top's inside), knob rim 17.42 (0.5 above the top face, knob on, centered).
 // Panel-mount push buttons (red cap, threaded body, nut inside): measured.
 button_thread = 14.84;        // threaded body diameter
 button_d = button_thread + 0.5; // hole for the threads (PLA holes print a little small)
@@ -81,7 +81,7 @@ assert(joy_c[1] - joy_board[1] / 2 >= wall && joy_c[1] + joy_board[1] / 2 <= hea
        "joystick board taller than the head");
 assert(joy_post[0] < joy_board[0] && joy_post[1] < joy_board[1], "joystick posts outside its board");
 assert(joy_hole >= joy_housing + 1, "joystick hole narrower than the stick's travel (housing width + 1)");
-assert(joy_hole >= joy_knob_d + 2, "joystick hole too tight for the knob: its rim dips into the hole when tilted");
+assert(joy_depth - top_t >= 12.26 + 0.5, "joystick housing (12.26 tall) hits the inside of the top: raise joy_depth");
 
 module head() {
   difference() {
