@@ -25,7 +25,7 @@ The full plan, parts list and risks are in [docs/plan.md](docs/plan.md).
 | --- | --- | --- |
 | [headset/](headset/) | Parametric OpenSCAD shell, lens focus jig | Optics and industrial design |
 | [phone/](phone/) | PhoneVR setup script and fork notes | Phone and streaming |
-| [firmware/controller/](firmware/controller/) | Xiao ESP32S3 controller firmware (PlatformIO) | Controllers |
+| [firmware/controller/](firmware/controller/) | ESP32 controller firmware: DevKitC or Xiao ESP32S3 (PlatformIO) | Controllers |
 | [firmware/hub/](firmware/hub/) | ESP-NOW to USB-serial hub, DevKitC (PlatformIO) | Controllers |
 | [firmware/shared/packet.h](firmware/shared/packet.h) | Radio packet format | Controllers |
 | [bridge/](bridge/) | Python bridge: hub serial to VMT OSC, arm model, yaw snap | Controllers |
@@ -37,7 +37,7 @@ The full plan, parts list and risks are in [docs/plan.md](docs/plan.md).
 ```sh
 # Controllers (any OS with PlatformIO)
 cd firmware/hub && pio run -t upload
-cd firmware/controller && pio run -e left -t upload    # then -e right
+cd firmware/controller && pio run -e devkit_left -t upload    # then devkit_right
 
 # Bridge (on the Windows laptop, with SteamVR and VMT running)
 cd bridge && pip install -e . && python -m myphonevision_bridge --debug

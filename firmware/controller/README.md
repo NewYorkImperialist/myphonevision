@@ -1,10 +1,10 @@
 # Controller firmware
 
-Each Xiao ESP32S3 Sense reads an MPU-6050, a thumbstick, an FSR trigger and five buttons. It fuses orientation with a Mahony filter and sends a 200 Hz packet ([../shared/packet.h](../shared/packet.h)) by ESP-NOW broadcast on channel 1 to the hub. Haptic packets come back the same way.
+Runs on an **ESP32-DevKitC** (default) or a **Seeed Xiao ESP32S3**. Each controller reads an MPU-6050, a thumbstick, an FSR trigger and five buttons. It fuses orientation with a Mahony filter and sends a 200 Hz packet ([../shared/packet.h](../shared/packet.h)) by ESP-NOW broadcast on channel 1 to the hub. Haptic packets come back the same way.
 
 ```sh
-pio run -e left -t upload      # left hand
-pio run -e right -t upload     # right hand
+pio run -e devkit_left -t upload    # DevKitC, left hand (devkit_right for right)
+pio run -e xiao_left -t upload      # Xiao ESP32S3 instead
 pio device monitor             # status, gyro bias, IMU errors
 ```
 
@@ -12,19 +12,23 @@ pio device monitor             # status, gyro bias, IMU errors
 
 ## Wiring
 
-| Part | Xiao pin | Notes |
-| --- | --- | --- |
-| MPU-6050 SDA / SCL | D4 / D5 | VCC to 3V3, AD0 to GND (0x68) |
-| Joystick VRx / VRy | D0 / D1 | VCC to 3V3 |
-| Joystick SW | D9 | to GND when pressed |
-| FSR trigger | D2 | FSR from 3V3 to D2, 10 kΩ from D2 to GND |
-| Button A | D3 | button to GND (internal pull-up) |
-| Button B | D6 | button to GND |
-| System | D7 | button to GND; tap = system, hold 1 s = snap yaw to head |
-| Grip | D8 | button to GND |
-| Haptic motor | D10 | 1 kΩ to an NPN base; motor from 5V to collector; flyback diode across the motor |
-| Power | 5V pin | 4×AA through a Schottky diode (Seeed requires one) |
-| Antenna | U.FL | the Xiao has no PCB antenna: fit its antenna or a 31 mm wire |
+Buttons go from the pin to GND (internal pull-up). Wire the FSR from 3V3 to the trigger pin, with 10 kΩ from that pin to GND.
+
+| Part | DevKitC GPIO | Xiao pin | Notes |
+| --- | --- | --- | --- |
+| MPU-6050 SDA / SCL | 21 / 22 | D4 / D5 | VCC to 3V3, AD0 to GND (0x68) |
+| Joystick VRx / VRy | 34 / 35 | D0 / D1 | VCC to 3V3 |
+| FSR trigger | 32 | D2 | |
+| Joystick SW | 13 | D9 | |
+| Button A | 25 | D3 | |
+| Button B | 26 | D6 | |
+| System | 27 | D7 | tap = system, hold 1 s = snap yaw to head |
+| Grip | 14 | D8 | |
+| Haptic motor | 23 | D10 | 1 kΩ to an NPN base; motor from 5V to collector; flyback diode across the motor |
+| Power | 5V pin | 5V pin | 4×AA through a Schottky diode, or an Anker bank on the USB port |
+| Antenna | U.FL | U.FL | the -32UE and the Xiao have no PCB antenna: fit one, or a 31 mm wire |
+
+On the DevKitC, GPIO34–39 are input-only with no pull-ups, so they carry only the analog inputs.
 
 Pins, deadzone, trigger calibration and inversion are in [include/config.h](include/config.h). Watch the serial monitor while squeezing the trigger to set `TRIGGER_RAW_MIN` and `TRIGGER_RAW_MAX`.
 
@@ -34,4 +38,4 @@ The bridge converts the IMU's frame to the controller's frame with `--mount`. Th
 
 ## UDP fallback
 
-If the hub dies, build `-e left_udp` / `-e right_udp` after setting the hotspot SSID, password and PC address in `config.h`. Then run the bridge with `--udp 39600`.
+If the hub dies, build the `_udp` env (e.g. `devkit_left_udp`) after setting the hotspot SSID, password and PC address in `config.h`. Then run the bridge with `--udp 39600`.

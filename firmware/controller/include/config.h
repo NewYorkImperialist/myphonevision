@@ -1,6 +1,5 @@
-// Per-build settings for the controller. Pin numbers are Xiao ESP32S3 "Dx"
-// aliases. Analog inputs must stay on ADC1 pins (D0-D5, D8-D10) because ADC2
-// stops working while the radio is on.
+// Per-build settings for the controller. Analog inputs must stay on ADC1
+// pins because ADC2 stops working while the radio is on.
 #pragma once
 
 #ifndef MPV_HAND
@@ -8,6 +7,22 @@
 #endif
 
 // --- Pins -------------------------------------------------------------------
+#if MPV_BOARD_DEVKIT
+// ESP32-DevKitC (-32E / -32UE). GPIO34-39 are input-only with no pull-ups,
+// so they only take the analog inputs; buttons use pins with pull-ups.
+#define PIN_STICK_X 34      // joystick VRx (ADC1)
+#define PIN_STICK_Y 35      // joystick VRy (ADC1)
+#define PIN_TRIGGER 32      // FSR divider (ADC1)
+#define PIN_I2C_SDA 21
+#define PIN_I2C_SCL 22
+#define PIN_BTN_A 25
+#define PIN_BTN_B 26
+#define PIN_BTN_SYSTEM 27
+#define PIN_BTN_GRIP 14
+#define PIN_BTN_STICK 13    // joystick SW
+#define PIN_HAPTIC 23
+#else
+// Seeed Xiao ESP32S3 "Dx" aliases (ADC1: D0-D5, D8-D10).
 #define PIN_STICK_X D0      // joystick VRx
 #define PIN_STICK_Y D1      // joystick VRy
 #define PIN_TRIGGER D2      // FSR divider (FSR to 3V3, 10k to GND)
@@ -19,6 +34,7 @@
 #define PIN_BTN_GRIP D8
 #define PIN_BTN_STICK D9    // joystick SW
 #define PIN_HAPTIC D10      // NPN base through 1k; motor on 5V with flyback diode
+#endif
 
 // Buttons are wired pin -> button -> GND and use the internal pull-up.
 
