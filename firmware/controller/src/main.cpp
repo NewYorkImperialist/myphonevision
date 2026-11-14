@@ -7,6 +7,7 @@
 
 #include "config.h"
 #include "mahony.h"
+#include "bno055.h"
 #include "mpu6050.h"
 #include "packet.h"
 
@@ -20,7 +21,17 @@ static IPAddress targetIp;
 static const uint8_t kBroadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 #endif
 
-static Mpu6050 imu;
+// Uses whichever IMU answers: MPU-6050 (GY-521) first, then BNO055.
+static struct {
+  Mpu6050 mpu;
+  Bno055 bno;
+  bool isBno = false;
+  bool begin(TwoWire &w) {
+    if (mpu.begin(w)) return isBno = false, true;
+    return isBno = bno.begin(w);
+  }
+  bool read(float g[3], float a[3]) { return isBno ? bno.read(g, a) : mpu.read(g, a); }
+} imu;
 static Mahony filter(MAHONY_KP, MAHONY_KI);
 static float gyroBias[3] = {0, 0, 0};
 static bool gyroCalibrated = false;
@@ -233,9 +244,10 @@ void setup() {
 
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, 400000);
   while (!imu.begin(Wire)) {
-    Serial.println("MPU-6050 not found on I2C; check wiring");
+    Serial.println("No IMU (MPU-6050 or BNO055) found on I2C; check wiring");
     delay(1000);
   }
+  Serial.println(imu.isBno ? "IMU: BNO055" : "IMU: MPU-6050");
   for (int i = 0; i < 3 && !gyroCalibrated; i++) calibrateGyro();  // a bump or noisy sample gets a retry
   setupRadio();
   startHaptic(180, 150);  // buzz once: ready
