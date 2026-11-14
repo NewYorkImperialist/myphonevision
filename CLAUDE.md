@@ -49,6 +49,16 @@ Build both controllers and all three SlimeVR boards from the tested parts ([docs
 | `headset/`, `cases/` (OpenSCAD) | All parts render and export; sizes from datasheets until real parts are measured; nothing printed yet |
 | PhoneVR | Use the published APK (above); lens settings via `tools/cardboard_qr.py` |
 
+## Working together (four people, four Claudes, one repo)
+
+GitHub logins: NewYorkImperialist = Jayden, TSVRN9 = Pixel owner, Nofees4Novembah and ygrfhf = industrial design / parts (add your role here on first commit).
+
+- **Stay in your folders.** Pixel owner: `phone/`, `tools/windows/`, `tools/cardboard_qr.py`. Industrial design: `headset/`, `cases/`, `tools/export-stl.sh`. Parts and Jayden: `firmware/`, `bridge/`, `docs/wiring.md`. Need a change in someone else's folder? Open an issue for them instead of editing it.
+- **Push small commits straight to `main`.** `git pull --rebase` before every push; never force-push. No PRs; they're too slow for a 36-hour build.
+- **In this file, edit only your role's section and your rows of the state table.** Shared files (`README.md`, `docs/plan.md`) and the packet contract (`firmware/shared/packet.h` + `bridge/myphonevision_bridge/protocol.py`) change only after an issue that names everyone affected.
+- **Ask or hand off through GitHub issues:** `gh issue create --assignee <login> --title "…"`. Measurements go in an issue too (lens diameter/thickness/focal length, battery holder and joystick sizes), so whoever needs them can find them. Close with `Fixes #N` in the commit.
+- **Check your issues** at the start of each task: `gh issue list --assignee @me`. The session-start hook in `.claude/settings.json` pulls `main` and lists them for you.
+
 ## Rules for working in this repo
 
 - **No Claude attribution.** Don't add `Co-Authored-By: Claude` or "Generated with Claude Code" lines to commits or PR descriptions. Commits are authored by the teammate making them.
