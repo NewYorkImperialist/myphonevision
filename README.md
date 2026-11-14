@@ -24,6 +24,7 @@ The full plan, parts list and risks are in [docs/plan.md](docs/plan.md).
 | Path | What | Workstream |
 | --- | --- | --- |
 | [headset/](headset/) | Parametric OpenSCAD shell, lens focus jig | Optics and industrial design |
+| [cases/](cases/) | Tracker cases and controller shells (OpenSCAD) | Optics and industrial design |
 | [phone/](phone/) | PhoneVR setup script and fork notes | Phone and streaming |
 | [firmware/controller/](firmware/controller/) | ESP32 controller firmware: DevKitC or Xiao ESP32S3 (PlatformIO) | Controllers |
 | [firmware/hub/](firmware/hub/) | ESP-NOW to USB-serial hub, DevKitC (PlatformIO) | Controllers |
@@ -31,6 +32,7 @@ The full plan, parts list and risks are in [docs/plan.md](docs/plan.md).
 | [bridge/](bridge/) | Python bridge: hub serial to VMT OSC, arm model, yaw snap | Controllers |
 | [firmware/slimevr/](firmware/slimevr/) | SlimeVR tracker wiring and config | Body tracking |
 | [tools/windows/](tools/windows/) | adb forwarding and firewall scripts | Phone and streaming |
+| [tools/export-stl.sh](tools/export-stl.sh) | Export every printable part to `build/stl/` | Optics and industrial design |
 
 ## Quick start
 
@@ -52,6 +54,7 @@ cd bridge && pip install -e . && python -m myphonevision_bridge --debug
 | --- | --- |
 | Controller and hub firmware | Compiles for DevKitC and Xiao (espressif32 6.12.0), with a serial bench test; not yet run on hardware |
 | Bridge | Unit tests and a UDP-to-OSC smoke test pass; not yet run against SteamVR |
-| Headset CAD | Written, not yet rendered or printed; needs lens measurements |
+| Headset CAD | Renders and exports cleanly; supports stacked lenses, top strap; not printed; needs lens measurements |
+| Tracker and controller cases | Render and export cleanly; not printed; sizes from datasheets until parts are measured |
 | PhoneVR fork | Not started; `phone/setup.sh` checks out PR #458 |
 | SlimeVR | `firmware/slimevr/build.sh` builds stock SlimeVR v0.7.4 for DevKitC + 2× MPU-6050; not yet flashed |

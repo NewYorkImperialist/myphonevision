@@ -13,6 +13,9 @@ In order of preference:
 
 ## 2. Measure
 
+**Stacked lenses** (for example two 3x magnifiers per eye): measure the stack as one lens. Hold the lenses together for the focal-length test, and measure the whole stack's thickness. The lens plate thickens automatically to fit, and the `lens_ring` part locks the stack in.
+
+
 - **Focal length:** focus a bright window across the room onto paper. The lens-to-paper distance is `lens_f`.
 - **Diameter and rim thickness:** calipers, giving `lens_d` and `lens_thk`.
 
@@ -21,7 +24,7 @@ Expect about 66° vertical FOV at 50 mm and 56° at 62 mm.
 ## 3. Print the focus jig first (20 min)
 
 ```sh
-openscad -D 'part="jig"' -D lens_d=25 -D lens_f=45 -o jig.stl headset.scad
+openscad -D 'part="jig"' -D lens_d=25 -D lens_thk=6 -D lens_f=45 -o jig.stl headset.scad
 openscad -D 'part="jig_ring"' -D lens_d=25 -o jig_ring.stl headset.scad
 ```
 
@@ -32,10 +35,10 @@ Stand the jig on the phone showing a grid, look through the lens, and add 1 mm r
 PLA, 0.2–0.28 mm layers. Set the measured values on the command line, or edit the top of the file:
 
 ```sh
-for p in front tray door shim; do
-  openscad -D "part=\"$p\"" -D lens_d=25 -D lens_thk=6 -D lens_f=45 -o "$p.stl" headset.scad
-done
+tools/export-stl.sh -D lens_d=25 -D lens_thk=6 -D lens_f=45    # from the repo root
 ```
+
+OpenSCAD: `brew install --cask openscad@snapshot` on macOS (the plain `openscad` cask is disabled), or a snapshot from openscad.org.
 
 | Part | Print | Notes |
 | --- | --- | --- |
@@ -43,14 +46,15 @@ done
 | `tray` | back down | Holds the phone; the camera bar pokes through the back slot |
 | `door` | flat | Drops in across the USB end; USB-C passes through it |
 | `shim` | flat, print 4 | `shim_count` (2) sit between body and tray at nominal focus; add or remove to refocus |
+| `lens_ring` | flat, print 2 | Press-fits behind each lens (or stack) to hold it in; a dab of glue if loose |
 
-Assembly: drop the lenses into the seats from the tray side. Bolt (M3) or zip-tie the four corner flanges: body, then shims, then tray. Slide the phone in from the USB end, screen toward the lenses, camera end first. Drop the door in and push a 1.75 mm filament offcut through the ear and the door tab as the latch pin. Reuse the donor viewer's strap and foam, or use elastic and velcro through the strap ears.
+Assembly: drop the lenses into the seats from the tray side and press a `lens_ring` in behind each. Bolt (M3) or zip-tie the four corner flanges: body, then shims, then tray. Slide the phone in from the USB end, screen toward the lenses, camera end first. Drop the door in and push a 1.75 mm filament offcut through the ear and the door tab as the latch pin. Thread a headband through the two side ears. A second band from the top ear over your head takes weight off your face. If your band is wider than 32 mm, fold it or set `strap_slot`.
 
 `openscad headset.scad` with `part = "assembly"` shows everything in place. The console echoes the lens-to-screen distance and spacer length; phone fork change 3 needs those numbers.
 
 ## Unchecked
 
-- The CAD hasn't been rendered or printed yet. Render the assembly before the first long print.
+- Every part renders and exports cleanly (OpenSCAD 2026.10), including with 50 mm stacked lenses, where the nose notch shrinks automatically to keep the lens seats intact. Nothing has been printed yet.
 - Pixel 7 camera bar position (`cam_from_top`, `cam_bar_len`) and body size are from the spec sheet. Check them with calipers.
 - IPD is fixed at 63 mm (lens centers at ±31.5 mm). An adjustable slider is a stretch goal.
 

@@ -1,4 +1,4 @@
-// myphonevision headset shell, fully parametric. OpenSCAD 2021.01+.
+// myphonevision headset shell, fully parametric. Tested with OpenSCAD 2026.10 (snapshot).
 //
 // Pick a part to export (or pass -D 'part="front"' on the command line):
 //   assembly   all parts in place, for checking fit (don't print)
@@ -6,6 +6,7 @@
 //   tray       phone tray; print back-down (camera slot on the bed)
 //   door       sliding end door; print flat
 //   shim       focus shim, shim_t thick; print as many as focus needs
+//   lens_ring  press-fit ring that locks a lens (stack) in its seat; print 2
 //   jig        single-lens focus test tube (print this first, ~20 min)
 //   jig_ring   1 mm spacer ring for the jig
 //
@@ -15,8 +16,10 @@
 part = "assembly";
 
 // ---- Measure these first (see headset/README.md) --------------------------
+// Stacked lenses (e.g. two 3x magnifiers per eye): measure the stack as one
+// lens. lens_thk = the whole stack's thickness; lens_f = the stack's focal length.
 lens_d = 25.0;          // lens diameter, calipers
-lens_thk = 6.0;         // lens edge-to-edge thickness at the rim
+lens_thk = 6.0;         // lens (or stack) thickness at the rim
 lens_f = 45.0;          // focal length from the window-on-paper test
 focus_back_off = 2.5;   // sit the screen this much inside the focal length
 ipd = 63.0;             // lens center spacing
@@ -35,14 +38,16 @@ usb_h = 8.0;
 // ---- Shell ----------------------------------------------------------------
 wall = 2.4;
 clear = 0.6;            // phone clearance per side
-plate_t = 4.0;          // lens plate thickness
 lens_lip = 1.2;         // ledge on the face side that the lens rests on
+ring_t = 1.6;           // lens retaining ring thickness
+plate_t = max(4.0, lens_lip + lens_thk + ring_t);  // grows to fit a lens stack
 lip = 2.0;              // tray lip that holds the phone's screen edge
 shim_t = 1.0;           // focus shim thickness
 shim_count = 2;         // shims fitted at nominal focus (gives +-adjustment)
 nose_w = 38;
 nose_h = 30;
-strap_slot = [4, 32];   // width, height of each strap slot
+strap_slot = [4, 32];   // width, height of each strap slot (height = strap width)
+top_strap = true;       // add an ear on top for an over-the-head strap
 bolt_d = 3.4;           // M3 clearance, or a zip tie
 door_t = 2.4;
 vent_w = 3;
@@ -60,10 +65,18 @@ body_len = lens_screen - (plate_t - lens_center_z) - tray_face_to_screen - shim_
 tray_t = lip + phone_t + clear + wall;
 flange = 9;             // corner flange size for bolts / zip ties
 
+// Shrink the nose notch if big lenses would break into it: keep its round tip
+// at least 2.5 mm clear of each lens seat.
+seat_r = (lens_d + 0.3) / 2;
+nose_tip_r = nose_w * 0.33;
+nose_clear_y = sqrt(max(0, pow(seat_r + nose_tip_r + 2.5, 2) - pow(ipd / 2, 2)));
+nose_h_fit = min(nose_h, H / 2 - nose_clear_y + nose_w / 3);
+
 assert(body_len > 5, str("body_len ", body_len, " is too short: check lens_f and plate_t"));
 assert(ipd / 2 + lens_d / 2 + 1 < W / 2, "lenses don't fit across the shell");
 echo(str("lens-to-screen ", lens_screen, " mm; spacer body ", body_len,
-         " mm; each shim moves focus ", shim_t, " mm"));
+         " mm; lens plate ", plate_t, " mm; each shim moves focus ", shim_t, " mm"));
+if (nose_h_fit < nose_h) echo(str("nose notch reduced to ", nose_h_fit, " mm to clear the lenses"));
 
 // Lens centers, relative to the shell's center.
 lens_pos = [[-ipd / 2, 0], [ipd / 2, 0]];
@@ -75,7 +88,7 @@ module nose(t) {
   translate([0, -H / 2 - 1, -1])
     hull() {
       translate([-nose_w / 2, 0, 0]) cube([nose_w, 1, t + 2]);
-      translate([0, nose_h - nose_w / 3, 0]) cylinder(d = nose_w * 0.66, h = t + 2);
+      translate([0, nose_h_fit - nose_w / 3, 0]) cylinder(r = nose_tip_r, h = t + 2);
     }
 }
 
@@ -104,6 +117,13 @@ module lens_plate() {
           difference() {
             centered_box(14, strap_slot[1] + 10, plate_t);
             translate([sx * 1, 0, -1]) centered_box(strap_slot[0], strap_slot[1], plate_t + 2);
+          }
+      // Top ear for an over-the-head strap.
+      if (top_strap)
+        translate([0, H / 2 + 6, 0])
+          difference() {
+            centered_box(strap_slot[1] + 10, 14, plate_t);
+            translate([0, 1, -1]) centered_box(strap_slot[1], strap_slot[0], plate_t + 2);
           }
     }
     for (p = lens_pos) translate([p[0], p[1], 0]) {
@@ -190,16 +210,24 @@ module door() {
   }
 }
 
+module lens_ring() {
+  // Press it into the seat behind the lens; a dab of glue if it's loose.
+  difference() {
+    cylinder(d = lens_d + 0.15, h = ring_t);
+    translate([0, 0, -1]) cylinder(d = lens_d - 3, h = ring_t + 2);
+  }
+}
+
 module jig() {
   // Stand it on the phone screen showing a grid; look through the lens.
   // Add jig_rings until the grid is sharp; ring count tells you the error.
-  jig_h = lens_screen - (lens_thk - lens_center_z) - 2;  // 2 mm short, so rings add focus
+  jig_h = lens_screen - lens_thk / 2 - 2;  // lens center 2 mm short of focus, so rings add
   difference() {
     cylinder(d = lens_d + 6, h = jig_h + lens_thk);
     translate([0, 0, -1]) cylinder(d = lens_d - 3, h = jig_h + lens_thk + 2);
     translate([0, 0, jig_h]) cylinder(d = lens_d + 0.3, h = lens_thk + 1);
   }
-  echo(str("jig: screen to lens center = ", jig_h + lens_center_z,
+  echo(str("jig: screen to lens center = ", jig_h + lens_thk / 2,
            " mm with no rings; each ring adds 1 mm"));
 }
 
@@ -231,6 +259,7 @@ else if (part == "front") front();
 else if (part == "tray") tray();
 else if (part == "door") rotate([0, 90, 0]) translate([-door_x0 - 0.2 - door_t, 0, 0]) door();
 else if (part == "shim") shim();
+else if (part == "lens_ring") lens_ring();
 else if (part == "jig") jig();
 else if (part == "jig_ring") jig_ring();
 else assert(false, str("unknown part: ", part));
