@@ -17,7 +17,7 @@ The phone is the only part on a cable. Controllers use ESP-NOW and trackers use 
 1. **A Windows laptop with a hardware video encoder**: NVIDIA GTX 1000+ (NVENC), AMD (AMF) or Intel (VPL). No such laptop means re-planning as a standalone Android app, which loses SteamVR.
 2. **A matched pair of lenses**: 40–50 mm focal length, 25–35 mm diameter. The headset CAD can't be finalized without them. See [headset/README.md](headset/README.md).
 
-The full plan, parts list and risks are in [docs/plan.md](docs/plan.md).
+The full plan, parts list and risks are in [docs/plan.md](docs/plan.md). Step-by-step wiring for the controllers, hub and trackers is in [docs/wiring.md](docs/wiring.md).
 
 ## Layout
 
