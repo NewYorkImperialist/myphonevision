@@ -22,6 +22,7 @@ joy_board = [38.1, 38.1];     // Adafruit 512 breakout, measured 38.08 square, 1
 joy_hole = 28;                // opening the stick moves in: at least housing + 1 (the stick stays within
                               // the housing); wide enough for the knob's rim to dip in when tilted
 joy_housing = 19.96;          // measured: width of the stick's housing on the board
+joy_knob_d = 26;              // measured: knob's outer diameter (it tilts down into the hole)
 joy_post = [30.5, 30.5];      // mounting-hole spacing, center to center: measured 27.4 inner gap + 3.16 hole
 joy_post_bore = 2.8;          // M3 screws thread into the printed posts
 joy_depth = 15.5;             // head's outer top face down to the board's top surface (sets post height).
@@ -70,6 +71,7 @@ assert(joy_c[1] - joy_board[1] / 2 >= wall && joy_c[1] + joy_board[1] / 2 <= hea
        "joystick board taller than the head");
 assert(joy_post[0] < joy_board[0] && joy_post[1] < joy_board[1], "joystick posts outside its board");
 assert(joy_hole >= joy_housing + 1, "joystick hole narrower than the stick's travel (housing width + 1)");
+assert(joy_hole >= joy_knob_d + 2, "joystick hole too tight for the knob: its rim dips into the hole when tilted");
 
 module head() {
   difference() {
