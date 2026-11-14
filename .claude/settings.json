@@ -1,14 +1,10 @@
 {
   "hooks": {
     "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "git pull --ff-only -q 2>&1 | tail -2; echo '--- Open issues assigned to you:'; gh issue list --assignee @me --state open 2>&1 | head -20 || true"
-          }
-        ]
-      }
+      { "hooks": [ { "type": "command", "command": "cd \"$CLAUDE_PROJECT_DIR\" && git pull --ff-only -q 2>&1 | tail -2; tools/inbox.sh all" } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "cd \"$CLAUDE_PROJECT_DIR\" && tools/inbox.sh 120" } ] }
     ]
   }
 }

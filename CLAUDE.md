@@ -8,6 +8,23 @@ HackUMass project: a SteamVR headset built from a Pixel 7 (display and head trac
 
 Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes controllers + body tracking, then integration and the night shift. **The Amherst team is getting the lenses.** Best: a phone VR viewer (lenses, strap and foam in one; ask the Discord and organizers for an old Cardboard). Otherwise identical magnifiers: two of 5x or stronger, or four of 3x stacked two per eye (about 5–6x combined). Each lens must be under about 50 mm (2 in) across so two fit side by side. Measure the diameter, the thickness (of the whole stack if stacking) and the focal length (focus a window onto paper; lens-to-paper distance), then share the three numbers: they drive the headset CAD and the phone's lens QR code. See [headset/README.md](headset/README.md).
 
+### Hardware on hand (2026-11-14)
+
+| Have | Use |
+| --- | --- |
+| 2 ESP32 kits | Left and right controllers (`devkit_left`, `devkit_right`) |
+| 1 generic ESP32-WROOM-32 board (FCC ID 2BB77-ESP32-32X, PCB antenna) | Hub (`firmware/hub`) |
+| 3 MPU-6050 (GY-521) | One per controller, one spare |
+| 2 Adafruit 512 analog thumb joysticks | One per controller; check the Y direction with `d` in the bench test (`STICK_INVERT_Y`) |
+| 2 FSRs | Triggers |
+| 3 push buttons | Face buttons |
+| 2 lab "accelerometer/gyroscopic" sensors | Unidentified: read the chip markings |
+| 1 Pololu IMU (label "imu0b 0j3865") | Unidentified MinIMU-9 version: read the back of the board |
+| Logitech webcam | Camera body-tracking fallback |
+| 2 Grove 3-axis digital accelerometers (±1.5 g, MMA7660) | Useless for tracking (tilt only, no gyro): return them |
+
+**Still needed:** 2 vibration motors, 2 battery holders + AA cells (or the Anker pack). **Body tracking is short:** SlimeVR needs 3 more ESP32 boards and 5–6 gyro IMUs. Unless teammates can still check out DevKitCs, plan on webcam body tracking.
+
 ### Pixel owner: phone and streaming
 1. Confirm the Windows laptop's GPU is NVIDIA, AMD or Intel (hardware video encoder). If not, stop and re-plan (docs/plan.md, gate 1).
 2. Install SteamVR and the **ALVR nightly v21.0.0-dev14** (ALVR only connects matching versions).
@@ -56,8 +73,18 @@ GitHub logins: NewYorkImperialist = Jayden, TSVRN9 = Pixel owner, Nofees4Novemba
 - **Stay in your folders.** Pixel owner: `phone/`, `tools/windows/`, `tools/cardboard_qr.py`. Industrial design: `headset/`, `cases/`, `tools/export-stl.sh`. Parts and Jayden: `firmware/`, `bridge/`, `docs/wiring.md`. Need a change in someone else's folder? Open an issue for them instead of editing it.
 - **Push small commits straight to `main`.** `git pull --rebase` before every push; never force-push. No PRs; they're too slow for a 36-hour build.
 - **In this file, edit only your role's section and your rows of the state table.** Shared files (`README.md`, `docs/plan.md`) and the packet contract (`firmware/shared/packet.h` + `bridge/myphonevision_bridge/protocol.py`) change only after an issue that names everyone affected.
-- **Ask or hand off through GitHub issues:** `gh issue create --assignee <login> --title "…"`. Measurements go in an issue too (lens diameter/thickness/focal length, battery holder and joystick sizes), so whoever needs them can find them. Close with `Fixes #N` in the commit.
-- **Check your issues** at the start of each task: `gh issue list --assignee @me`. The session-start hook in `.claude/settings.json` pulls `main` and lists them for you.
+
+### Messaging between Claudes: GitHub issues
+
+Issues are the team's message board, for people and their Claudes alike. One issue = one conversation (a question, a handoff, a measurement, a blocker). Everything you post goes out under your human's GitHub account.
+
+- **Start a conversation:** `gh issue create --assignee <login> --title "Lens numbers for the headset" --body "…"`. Put the ask in the title. Assign whoever has to act; `@login` in the body pulls in anyone else.
+- **Reply:** `gh issue comment N --body "…"`. Read a thread: `gh issue view N --comments`.
+- **Finish:** close it when answered or done, from a commit (`Fixes #N`) or with `gh issue close N --comment "…"`.
+- **Be self-contained:** the other Claude can't see your session. Include numbers, file paths and commit hashes, not "as discussed".
+- **What goes in an issue:** measurements (lens diameter, thickness and focal length; battery holder and joystick sizes), requests to change someone else's folder or the packet contract, hardware swaps, and anything that blocks you.
+- **Your inbox is automatic.** Hooks in `.claude/settings.json` run `tools/inbox.sh`: at session start it pulls `main` and lists every open issue involving you; on each prompt (at most every 2 minutes) it shows issues someone else has updated since. When messages appear, tell your human, then answer or act on them. Ask your human before anything big, destructive or outside your role.
+- Needs `gh` installed and logged in (`gh auth login`). Approve the project hooks when Claude Code asks.
 
 ## Rules for working in this repo
 
