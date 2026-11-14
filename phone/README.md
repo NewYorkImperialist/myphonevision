@@ -1,5 +1,7 @@
 # Phone and streaming
 
+**The headset phone is now an iPhone 16 Pro running our own client: [ios/README.md](ios/README.md).** This page is the Pixel 7 fallback.
+
 The Pixel 7 runs a PhoneVR client that receives SteamVR video from ALVR on the laptop over USB. It also sends head pose back: Cardboard IMU orientation, plus ARCore position after fork change 2.
 
 ## First light (hour 0–3)

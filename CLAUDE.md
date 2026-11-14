@@ -1,6 +1,6 @@
 # myphonevision: read this first
 
-HackUMass project: a SteamVR headset built from a Pixel 7 (display and head tracking, ALVR over USB to a Windows laptop), two 3D-printed ESP32 controllers that SteamVR sees as Index controllers (through the VMT driver), and SlimeVR body trackers. See [README.md](README.md) for the layout and [docs/plan.md](docs/plan.md) for the full plan.
+HackUMass project: a SteamVR headset built from a Pixel 7 (display and head tracking, ALVR over USB to a Windows laptop), two 3D-printed ESP32 controllers that SteamVR sees as Index controllers (through the VMT driver), and SlimeVR body trackers. See [README.md](README.md) for the layout, [docs/goals.md](docs/goals.md) for the end goal (the whole desktop VR ecosystem, unmodified games) and timeline, and [docs/plan.md](docs/plan.md) for the full plan.
 
 **When a teammate starts a session here, tell them their next steps from the plan below.** Ask which role they have if you can't tell.
 
@@ -26,7 +26,7 @@ Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes co
 **Still needed:** 5 more push buttons (each controller needs A, B, system, grip; 8 total), 2 vibration motors, 2 battery holders + AA cells (or the Anker pack). **Body tracking is short:** SlimeVR needs 3 more ESP32 boards and 5–6 gyro IMUs. Unless teammates can still check out DevKitCs, plan on webcam body tracking.
 
 ### Phone and streaming (TSVRN9)
-**Headset phone is now a friend's iPhone 16 Pro; the Pixel 7 is the fallback** (issue #3: CAD `-D` values, software plan). The iPhone path is our own client built from [kotleni/iPhoneVR](https://github.com/kotleni/iPhoneVR) with ARKit pose; **Nafis (Nofees4Novembah) builds it on a Mac** (direction in issue #3), and its ALVR version decides the server version. Keep the Pixel steps below working until the team picks a go/no-go time.
+**Headset phone is now a friend's iPhone 16 Pro; the Pixel 7 is the fallback** (issue #3: CAD `-D` values, software plan). The iPhone path is our own client built from [kotleni/iPhoneVR](https://github.com/kotleni/iPhoneVR) with ARKit pose; **Nafis (Nofees4Novembah) builds it on a Mac** (spec: [phone/ios/README.md](phone/ios/README.md)), and its ALVR version decides the server version. Keep the Pixel steps below working until the team picks a go/no-go time.
 
 1. Confirm the Windows laptop's GPU is NVIDIA, AMD or Intel (hardware video encoder). If not, stop and re-plan (docs/plan.md, gate 1).
 2. Install SteamVR and the **ALVR nightly v21.0.0-dev14** (ALVR only connects matching versions).
