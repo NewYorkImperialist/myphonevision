@@ -170,7 +170,7 @@ def main() -> None:
     fails = sum(1 for s, _, _ in results if s == "FAIL")
     warns = sum(1 for s, _, _ in results if s == "WARN")
     print(f"\n{fails} FAIL, {warns} WARN")
-    print("Before each run: reset SlimeVR (full reset key), hold system 1 s on each controller "
+    print("Before each run: reset SlimeVR (full reset key), hold the stick click 1 s on each controller "
           "to snap yaw, and let the phone cool between sessions.")
     sys.exit(1 if fails else 0)
 

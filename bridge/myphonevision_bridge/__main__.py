@@ -21,6 +21,8 @@ from .hmd import FixedHmd, SteamVrHmd
 from .pose import MOUNTS, ArmModel, ControllerOrientation, with_pitch_trim
 
 HOLD_TO_SNAP_S = 1.0
+HOLD_TO_SYSTEM_S = 3.0  # stick hold: keep holding past the snap for a system click
+STICK_CENTERED = 0.3    # a stick hold only counts with the stick near center (not sprinting)
 SYSTEM_TAP_S = 0.05
 
 
@@ -115,6 +117,33 @@ def start_haptic_listener(port: int, send_haptic) -> None:
 
 # --- Main loop ------------------------------------------------------------------
 
+class StickHold:
+    """Click and hold the thumbstick, kept near center: at 1 s the heading snaps to the
+    head's (the drift reset); keep holding to 3 s for a system click (SteamVR menu).
+    The controllers have no system button, so this replaces its hold and tap. Stick
+    clicks still reach games as usual; a click while pushing the stick (e.g. sprint)
+    never counts."""
+
+    def __init__(self) -> None:
+        self.down_at: float | None = None
+        self.stage = 0  # 0 holding, 1 snapped, 2 system sent
+
+    def update(self, clicked: bool, stick: tuple[float, float], now: float) -> str | None:
+        if not clicked or max(abs(stick[0]), abs(stick[1])) > STICK_CENTERED:
+            self.down_at = None
+            return None
+        if self.down_at is None:
+            self.down_at, self.stage = now, 0
+        held = now - self.down_at
+        if self.stage == 0 and held >= HOLD_TO_SNAP_S:
+            self.stage = 1
+            return "snap"
+        if self.stage == 1 and held >= HOLD_TO_SYSTEM_S:
+            self.stage = 2
+            return "system"
+        return None
+
+
 class Hand:
     def __init__(self, hand: int, mount: Q.Quat) -> None:
         self.hand = hand
@@ -125,6 +154,7 @@ class Hand:
         self.system_down_at: float | None = None
         self.snapped = False
         self.system_release_at: float | None = None
+        self.stick_hold = StickHold()
         self.count = 0
         self.last: P.ControllerPacket | None = None
 
@@ -217,11 +247,23 @@ def main() -> None:
                         vmt.button(pkt.hand, V.BUTTON_SYSTEM, True)
                         h.system_release_at = now + SYSTEM_TAP_S
                     h.system_down_at = None
+            name = "left" if pkt.hand == 0 else "right"
             if h.system_down_at and not h.snapped and now - h.system_down_at >= HOLD_TO_SNAP_S:
                 h.orient.snap_yaw(pkt.quat, Q.yaw(head_rot))
                 h.snapped = True
                 source.send_haptic(pkt.hand, 0.7, 0.15)
-                print(f"{'left' if pkt.hand == 0 else 'right'}: yaw snapped to head")
+                print(f"{name}: yaw snapped to head")
+            # Stick hold: the same snap at 1 s, then a system click at 3 s.
+            gesture = h.stick_hold.update(bool(b & P.BTN_STICK), pkt.stick, now)
+            if gesture == "snap":
+                h.orient.snap_yaw(pkt.quat, Q.yaw(head_rot))
+                source.send_haptic(pkt.hand, 0.7, 0.15)
+                print(f"{name}: yaw snapped to head (stick hold)")
+            elif gesture == "system":
+                vmt.button(pkt.hand, V.BUTTON_SYSTEM, True)
+                h.system_release_at = now + SYSTEM_TAP_S
+                source.send_haptic(pkt.hand, 1.0, 0.4)
+                print(f"{name}: system click (stick hold)")
             h.prev_buttons = b
 
         for h in hands.values():

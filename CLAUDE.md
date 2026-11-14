@@ -59,7 +59,7 @@ Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes co
 ### Jayden (on site since 2026-11-14 midday)
 Build both controllers from the tested parts ([docs/wiring.md](docs/wiring.md)), run the bridge, then integration, demo and pitch. **Lenses:** two Carson TriView TV-26 magnifiers (30 mm lenses, 3x/5.5x, 8.5x stacked) are on their way to Jayden; measure focal length, thickness and ring diameter on arrival and post them to #4.
 
-- **Buttons:** each controller needs 4 (A, B, system, grip; stick click is on the joystick), so 8 total. 3 on hand, parts is sourcing 5 more (issue #2). If short, the **system** button goes on both controllers first: holding it 1 s is the drift reset.
+- **Controllers (issue #2):** both built by ygrfhf and running wirelessly on 4×AA (LEFT GY-521, RIGHT BNO055). **One button each (A)**; B, system and grip are dropped. **Drift reset = click and hold the thumbstick 1 s** (stick centered); hold to 3 s for a system click (SteamVR menu). Next: controller shells from `cad-work` with ygrfhf's measurements (`docs/wiring.md` step 2h).
 - **Body tracking: cut for now** (team decision, 2026-11-14). Focus on the headset and both controllers. If it comes back: the laptop runs Linux, so `docs/webcam-fbt.md` (a Windows download and Windows-only driver) won't work as written; the idea was our own MediaPipe webcam tracker feeding VMT trackers through the bridge.
 - **Demo games:** native SteamVR games need no changes, but the laptop runs Linux, so most run through Proton (Steam → Settings → Compatibility → enable Steam Play for all titles; start SteamVR before the game). Check a game on db.vronlinux.org or ProtonDB before buying. Easiest to hardest: SteamVR Home, Fruit Ninja VR, Beat Saber, Minecraft (Vivecraft mod).
 

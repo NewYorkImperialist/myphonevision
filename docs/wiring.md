@@ -179,5 +179,5 @@ WIFI_SSID=yourhotspot WIFI_PASS=yourpass firmware/slimevr/build.sh upload
 | Stick stuck at 4095 or 0 | Joystick powered from 5V, or VRx/VRy not connected |
 | Controller works on USB, dies on battery | Schottky diode backwards (stripe goes toward the board), or flat batteries |
 | Bridge shows no packets | Hub has no antenna, controller and hub flashed from different code versions, or the controller is in a `_udp` build |
-| Controller slowly turns in VR | Normal MPU-6050 drift: hold system 1 s to snap it back |
+| Controller slowly turns in VR | Normal IMU drift: click and hold the thumbstick 1 s (stick centered) to snap it back |
 | Only one tracker per SlimeVR board | Extension AD0 not tied to 3V3, or its cable is too long or has SDA/SCL side by side |

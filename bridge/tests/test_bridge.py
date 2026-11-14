@@ -89,3 +89,18 @@ def test_hub_is_told_apart_by_its_frames():
     stream = b"\x00boot text\r\n" + P.frame(controller_bytes(hand=0)) + P.frame(controller_bytes(hand=1))
     assert hands_seen(stream) == {0, 1}
     assert hands_seen(b"stick raw    0    0 | trigger raw    0 (  0%)\r\n") == set()
+
+
+def test_stick_hold_snaps_then_system():
+    from myphonevision_bridge.__main__ import StickHold
+    h, c = StickHold(), (0.0, 0.0)
+    events = [h.update(True, c, i * 0.1) for i in range(40)]  # held 4 s, centered
+    assert [(round(i * 0.1, 1), e) for i, e in enumerate(events) if e] == [(1.0, "snap"), (3.0, "system")]
+    assert h.update(False, c, 4.1) is None and h.update(True, c, 4.2) is None  # release restarts it
+
+
+def test_stick_hold_ignores_clicks_while_pushing():
+    from myphonevision_bridge.__main__ import StickHold
+    h = StickHold()
+    assert not any(h.update(True, (0.0, 0.9), i * 0.1) for i in range(30))  # sprint-click
+    assert not any(h.update(True, (0.0, 0.0), 3.0 + i * 0.1) for i in range(9))  # timer restarted
