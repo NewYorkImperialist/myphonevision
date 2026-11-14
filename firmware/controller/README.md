@@ -8,7 +8,7 @@ pio run -e xiao_left -t upload      # Xiao ESP32S3 instead
 pio device monitor             # status, gyro bias, IMU errors
 ```
 
-**After power-on, keep the controller still for 2 s** while it calibrates the gyro. It buzzes once when ready. If it moved, it runs uncalibrated and the bridge's `--debug` output says so; power-cycle to retry.
+**After power-on, keep the controller still for 2 s, and don't touch the stick,** while it calibrates the gyro and measures the stick's resting center. It buzzes once when ready. If it moved, it runs uncalibrated and the bridge's `--debug` output says so; power-cycle to retry.
 
 ## Wiring
 
@@ -40,7 +40,7 @@ Open `pio device monitor` and type:
 | --- | --- |
 | `d` | Toggle a live printout: raw stick and trigger values, buttons (A B S G K), roll, pitch, yaw |
 | `h` | Buzz the haptic motor |
-| `c` | Recalibrate the gyro (hold still 2 s) |
+| `c` | Recalibrate the gyro and stick center (hold still 2 s); the heading is kept, so no re-snap needed |
 
 To check wiring: press each button and watch its letter appear, move the stick to both ends, and tilt the controller and watch roll and pitch follow. Squeeze the trigger to find `TRIGGER_RAW_MIN` and `TRIGGER_RAW_MAX` for `config.h`. This needs no hub, bridge or SteamVR.
 

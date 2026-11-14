@@ -24,7 +24,7 @@ Run it before starting the bridge. It checks for the hub on USB, the VMT driver 
 
 - **Pose:** `/VMT/Raw/Driver`, with enable 5 (left) / 6 (right) from the first packet, because VMT latches the device type on first sight. Raw driver space needs no room matrix.
 - **Position (rung 1, arm model):** a shoulder fixed under the head, an elbow that follows the controller 40%, and a forearm along the controller. Good for pointing, menus and VRChat; Beat Saber will feel wrong.
-- **Orientation:** IMU quaternion, then the `--mount` preset, then a yaw offset. **Hold system for 1 s** to snap the controller's heading to the head's; it buzzes when done. A short tap is a normal system click. The MPU-6050 drifts, so expect to snap every 1–5 minutes.
+- **Orientation:** IMU quaternion, then the `--mount` preset, then a yaw offset. **Hold system for 1 s** to snap the controller's heading to the head's; it buzzes when done. It works pointing at the floor or ceiling too, but holding it level is most accurate. If hands look tilted up or down in games, add `--pitch-trim DEG` (positive raises the nose); VMT hands games the Index profile's grip pose, which can sit at an angle to the raw one. A short tap is a normal system click. The MPU-6050 drifts, so expect to snap every 1–5 minutes.
 - **Inputs:** trigger (value, touch, click above 0.9), grip (as a 0/1 value), A, B, system, and thumbstick (axes, click, touch), using VMT's Index mapping.
 - **Haptics:** listens for `/VMT/Out/Haptic` on port 39571 and forwards it to the right controller. VMT Manager also uses 39571, so close it while playing.
 

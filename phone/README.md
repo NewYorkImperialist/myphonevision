@@ -7,7 +7,7 @@ The Pixel 7 runs a PhoneVR client that receives SteamVR video from ALVR on the l
 1. On the laptop, install SteamVR and **ALVR v20.8.0**. That's the version PhoneVR names; don't take the latest.
 2. Install the stock PhoneVR APK on the Pixel. Connect over USB (see [Link](#link-usb)).
 3. Get SteamVR Home onto the phone with any viewer, even lenses held by hand. Write down the latency you see; it's the baseline.
-4. At the same time, build the PR #458 branch (`./setup.sh`, then build `pr-458`). Pair it with the ALVR nightly tagged **v21.0.0-dev14** (Nov 8–10, 2026 builds), because ALVR only connects matching versions. Whichever pair reaches SteamVR Home first wins.
+4. At the same time, install the **PR #458 app, already built by its author**: [PhoneVR-v21.0.0-dev14-ARcore-v21-release-v1.0.1.apk](https://github.com/righthandpaw/PhoneVR/releases/download/Release-v1.0.1/PhoneVR-v21.0.0-dev14-ARcore-v21-release-v1.0.1.apk) (13 MB, from [righthandpaw/PhoneVR releases](https://github.com/righthandpaw/PhoneVR/releases), Nov 5, 2026). It's newer than the PR, includes reprojection, and adds a Mali GPU fix (the Pixel 7's GPU is a Mali). No Android Studio needed. Pair it with the ALVR nightly tagged **v21.0.0-dev14** (Nov 8–10, 2026 builds), because ALVR only connects matching versions. Whichever pair reaches SteamVR Home first wins.
 
 Stock PhoneVR has open issues: crashes on connect under Android 16, and USB never working with v20.8.0. That's why both run side by side.
 
@@ -21,7 +21,7 @@ ALVR server settings: **disable ALVR's own controllers**, so the VMT controllers
 
 ## Fork work
 
-Run `./setup.sh` to clone PhoneVR into `phone/PhoneVR` (gitignored) and check out PR #458. PR #458 moves the client to the ALVR v21 API, adds ARCore 6DoF, its own head-orientation filter (Mahony with gyro-bias estimation) and a seated neck model, supports Wired mode, and cuts display prediction to 30 ms.
+**You don't need to build it:** use the APK above. `./setup.sh` clones the source into `phone/PhoneVR` (gitignored), only needed to read or change the code. PR #458 moves the client to the ALVR v21 API, adds ARCore 6DoF, its own head-orientation filter (Mahony with gyro-bias estimation) and a seated neck model, supports Wired mode, and cuts display prediction to 30 ms.
 
 1. **Rotational reprojection: already in PR #458.** Each refresh, `alvr_main.cpp` computes the rotation between the pose a frame was rendered for and the current head pose (`alvr_rotation_delta`) and passes it to ALVR's renderer as `reprojection_rotation`. When no new frame has arrived, it re-shows the last one, re-rotated. The stock client lacks this. Nothing to write; check that head turns feel instant once the PR build streams.
 2. **ARCore head position: tune only.** Check jitter and drift, that the last position holds when tracking drops, and that recentering works. ARCore starts only after video is flowing (`ARCORE_START_AFTER_VIDEO`).

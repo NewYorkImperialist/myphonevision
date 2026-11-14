@@ -57,5 +57,5 @@ cd bridge && pip install -e . && python -m myphonevision_bridge --debug
 | Bridge | Unit tests and a UDP-to-OSC smoke test pass; pre-demo check (`preflight`) added; not yet run against SteamVR |
 | Headset CAD | Renders and exports cleanly; supports stacked lenses, top strap; not printed; needs lens measurements |
 | Tracker and controller cases | Render and export cleanly; not printed; sizes from datasheets until parts are measured |
-| PhoneVR | PR #458 already has reprojection; lens settings come from a generated QR code (`tools/cardboard_qr.py`, checked against Google's Cardboard v2 code); app not yet built |
+| PhoneVR | No build needed: the PR #458 author publishes an APK (v1.0.1, with reprojection and a Mali GPU fix). Lens settings come from a generated QR code (`tools/cardboard_qr.py`) |
 | SlimeVR | `firmware/slimevr/build.sh` builds stock SlimeVR v0.7.4 for DevKitC + 2× MPU-6050; not yet flashed |
