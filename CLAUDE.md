@@ -54,7 +54,11 @@ Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes co
 - Decide the main demo: **VRChat with full-body tracking** (the arm model is enough) or **Beat Saber** (needs controller position tracking, rung 2: an iPhone running ZIG SIM, not built yet).
 
 ### Jayden (from hour 12)
-Build both controllers and all three SlimeVR boards from the tested parts ([docs/wiring.md](docs/wiring.md)), run the bridge, then integration, demo and pitch.
+Build both controllers from the tested parts ([docs/wiring.md](docs/wiring.md)), run the bridge, then body tracking, integration, demo and pitch.
+
+- **Buttons:** each controller needs 4 (A, B, system, grip; stick click is on the joystick), so 8 total. 3 on hand, parts is sourcing 5 more (issue #2). If short, the **system** button goes on both controllers first: holding it 1 s is the drift reset.
+- **Body tracking:** not enough ESP32 boards or gyro IMUs for SlimeVR (all 3 boards and 2 of 3 MPU-6050s go to the controllers and hub). Plan on **webcam tracking**: [docs/webcam-fbt.md](docs/webcam-fbt.md) (MediaPipe v0.7-beta, VRChat OSC mode, so it can't clash with VMT). Like SlimeVR, it needs ARCore head position working. Switch back to SlimeVR only if 3 more boards and 5–6 gyro IMUs turn up.
+- **Demo games:** native SteamVR games need no changes. Easiest to hardest: SteamVR Home, Fruit Ninja VR, Beat Saber, Minecraft (Vivecraft mod), VRChat with full-body tracking.
 
 ## State of the code
 
