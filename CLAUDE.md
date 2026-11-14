@@ -74,7 +74,7 @@ Build both controllers from the tested parts ([docs/wiring.md](docs/wiring.md)),
 
 ## Working together (four people, four Claudes, one repo)
 
-GitHub logins: NewYorkImperialist = Jayden, TSVRN9 = Pixel owner, Nofees4Novembah and ygrfhf = industrial design / parts (add your role here on first commit).
+GitHub logins: NewYorkImperialist = Jayden, TSVRN9 = Pixel owner, Nofees4Novembah = Nafis, industrial design (headset, controller shells, lenses), ygrfhf = parts (add your role here on first commit).
 
 - **Stay in your folders.** Pixel owner: `phone/`, `tools/windows/`, `tools/cardboard_qr.py`. Industrial design: `headset/`, `cases/`, `tools/export-stl.sh`. Parts and Jayden: `firmware/`, `bridge/`, `docs/wiring.md`. Need a change in someone else's folder? Open an issue for them instead of editing it.
 - **Push small commits straight to `main`.** `git pull --rebase` before every push; never force-push. No PRs; they're too slow for a 36-hour build.
