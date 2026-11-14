@@ -32,6 +32,18 @@ On the DevKitC, GPIO34–39 are input-only with no pull-ups, so they carry only 
 
 Pins, deadzone, trigger calibration and inversion are in [include/config.h](include/config.h). Watch the serial monitor while squeezing the trigger to set `TRIGGER_RAW_MIN` and `TRIGGER_RAW_MAX`.
 
+## Bench test
+
+Open `pio device monitor` and type:
+
+| Key | Does |
+| --- | --- |
+| `d` | Toggle a live printout: raw stick and trigger values, buttons (A B S G K), roll, pitch, yaw |
+| `h` | Buzz the haptic motor |
+| `c` | Recalibrate the gyro (hold still 2 s) |
+
+To check wiring: press each button and watch its letter appear, move the stick to both ends, and tilt the controller and watch roll and pitch follow. Squeeze the trigger to find `TRIGGER_RAW_MIN` and `TRIGGER_RAW_MAX` for `config.h`. This needs no hub, bridge or SteamVR.
+
 ## IMU mounting
 
 The bridge converts the IMU's frame to the controller's frame with `--mount`. The default, `flat-x-forward`, assumes the GY-521 lies flat, components up, with its X arrow pointing out of the controller's tip. Other presets are in `bridge/myphonevision_bridge/pose.py`.

@@ -155,6 +155,43 @@ static uint16_t readButtons() {
   return b;
 }
 
+// Bench test over the USB serial monitor (pio device monitor):
+//   d  toggle a 10 Hz printout of raw inputs and orientation
+//   h  buzz the haptic motor
+//   c  re-run gyro calibration (hold still)
+static void printDebugLine() {
+  const float *q = filter.q;
+  float roll = atan2f(2 * (q[0] * q[1] + q[2] * q[3]), 1 - 2 * (q[1] * q[1] + q[2] * q[2]));
+  float pitch = asinf(constrain(2 * (q[0] * q[2] - q[3] * q[1]), -1.0f, 1.0f));
+  float yaw = atan2f(2 * (q[0] * q[3] + q[1] * q[2]), 1 - 2 * (q[2] * q[2] + q[3] * q[3]));
+  uint16_t b = readButtons();
+  Serial.printf("stick raw %4d %4d | trigger raw %4d (%3d%%) | buttons %c%c%c%c%c | "
+                "roll %6.1f pitch %6.1f yaw %6.1f deg%s\n",
+                analogRead(PIN_STICK_X), analogRead(PIN_STICK_Y), analogRead(PIN_TRIGGER),
+                (int)(readTrigger() * 100UL / 65535),
+                b & MPV_BTN_A ? 'A' : '-', b & MPV_BTN_B ? 'B' : '-',
+                b & MPV_BTN_SYSTEM ? 'S' : '-', b & MPV_BTN_GRIP ? 'G' : '-',
+                b & MPV_BTN_STICK ? 'K' : '-',
+                roll * RAD_TO_DEG, pitch * RAD_TO_DEG, yaw * RAD_TO_DEG,
+                gyroCalibrated ? "" : "  (gyro uncalibrated)");
+}
+
+static void pollSerialCommands() {
+  static bool debug = false;
+  static uint32_t lastPrintMs = 0;
+  while (Serial.available()) {
+    switch (Serial.read()) {
+      case 'd': debug = !debug; break;
+      case 'h': startHaptic(255, 300); break;
+      case 'c': calibrateGyro(); break;
+    }
+  }
+  if (debug && millis() - lastPrintMs >= 100) {
+    lastPrintMs = millis();
+    printDebugLine();
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   delay(500);
@@ -212,5 +249,6 @@ void loop() {
   }
 
   pollIncoming();
+  pollSerialCommands();
   analogWrite(PIN_HAPTIC, (int32_t)(hapticUntilMs - millis()) > 0 ? hapticAmp : 0);
 }

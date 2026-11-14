@@ -50,8 +50,8 @@ cd bridge && pip install -e . && python -m myphonevision_bridge --debug
 
 | Part | State |
 | --- | --- |
-| Controller and hub firmware | Compiles (espressif32 6.12.0); not yet run on hardware |
+| Controller and hub firmware | Compiles for DevKitC and Xiao (espressif32 6.12.0), with a serial bench test; not yet run on hardware |
 | Bridge | Unit tests and a UDP-to-OSC smoke test pass; not yet run against SteamVR |
 | Headset CAD | Written, not yet rendered or printed; needs lens measurements |
 | PhoneVR fork | Not started; `phone/setup.sh` checks out PR #458 |
-| SlimeVR | Config notes only; uses stock SlimeVR |
+| SlimeVR | `firmware/slimevr/build.sh` builds stock SlimeVR v0.7.4 for DevKitC + 2× MPU-6050; not yet flashed |

@@ -17,20 +17,18 @@ Three ESP32-DevKitC-32UE boards, each with two MPU-6050s: the primary at 0x68 (A
 
 ## Firmware
 
-1. Clone [SlimeVR-Tracker-ESP](https://github.com/SlimeVR/SlimeVR-Tracker-ESP) and open it in PlatformIO. (PlatformIO is restored at `~/.platformio` on the Mac.)
-2. In `platformio.ini`, select the `esp32dev` environment.
-3. In `src/defines.h`, set the IMUs explicitly. The firmware does **not** auto-detect the MPU-6050. On the versions in our notes that means:
+`build.sh` builds SlimeVR v0.7.4 for our setup: a DevKitC with two MPU-6050s on SDA 21 / SCL 22 at 0x68 and 0x69. It clones SlimeVR into `SlimeVR-Tracker-ESP/` (gitignored) and swaps the board's default sensor list (which assumes BNO085s) for [tracker.json](tracker.json). No SlimeVR files are edited.
 
-   ```c
-   #define IMU IMU_MPU6050
-   #define SECOND_IMU IMU_MPU6050
-   #define BOARD BOARD_WROOM32
-   #define PIN_IMU_SDA 21
-   #define PIN_IMU_SCL 22
-   ```
+```sh
+./build.sh                                        # build only (checked: compiles)
+WIFI_SSID=myhotspot WIFI_PASS=secret ./build.sh upload   # flash one board, hotspot baked in
+```
 
-   Newer firmware may describe sensors in a list macro instead. Follow the comments in the `defines.h` you cloned, keeping the same chips, addresses and pins. If the desk's "Accelerometer/Gyroscopic Sensor" turns out to be a BNO085 or ICM part, use that IMU type instead.
-4. Flash one board with one IMU first, and check that it appears in the SlimeVR server.
+Run `upload` once per board, plugged in over micro-USB. Without `WIFI_SSID`, set the Wi-Fi from the SlimeVR server after flashing. The first build downloads SlimeVR's toolchain (Arduino-ESP32 3.0.1), so run it once on good internet before the hackathon.
+
+- **Different IMU** (if the desk's sensor turns out to be a BNO085 or ICM part): change `"imu"` in `tracker.json`, for example to `IMU_BNO085` or `IMU_ICM42688`.
+- **One IMU on a board:** delete the second entry.
+- **Mounting rotation:** leave it at `DEG_0` and set each tracker's mounting in the SlimeVR server.
 
 ## Network
 
