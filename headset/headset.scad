@@ -27,9 +27,9 @@ focus_back_off = 2.5;   // sit the screen this much inside the focal length
 ipd = 63.0;             // lens center spacing
 
 // ---- Phone: Pixel 7 (check with calipers; add a case's thickness if used) -
-phone_w = 155.6;        // long edge
-phone_h = 73.2;         // short edge
-phone_t = 8.7;          // body thickness, not counting the camera bar
+phone_w = 149.6;        // long edge
+phone_h = 71.5;         // short edge
+phone_t = 8.25;          // body thickness, not counting the camera bar
 cam_bar_h = 2.7;        // how far the camera bar sticks out past the back (measure)
 screen_w = 147.0;
 screen_h = 68.0;
