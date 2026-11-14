@@ -457,28 +457,6 @@ struct VideoHandler {
         }
     }
 
-    static func pollNal() -> (UInt64, [AlvrViewParams], Data)? {
-        let nalLength = alvr_poll_nal(nil, nil, nil)
-        if nalLength == 0 {
-            return nil
-        }
-        let nalBuffer = UnsafeMutableBufferPointer<CChar>.allocate(capacity: Int(nalLength*16)) // HACK: idk how to handle this, there's a ToCToU here
-        let nalViewsPtr = UnsafeMutablePointer<AlvrViewParams>.allocate(capacity: 2)
-        defer { nalBuffer.deallocate() }
-        defer { nalViewsPtr.deallocate() }
-        var nalTimestamp:UInt64 = 0
-        let realNalLength = alvr_poll_nal(&nalTimestamp, nalViewsPtr, nalBuffer.baseAddress)
-        
-        let nalViews = [nalViewsPtr[0], nalViewsPtr[1]]
-        
-        let ret = (nalTimestamp, nalViews, Data(bytes: nalBuffer.baseAddress!, count: Int(realNalLength & 0xFFFFFFFF)))
-        return ret
-    }
-    
-    static func abandonAllPendingNals() {
-        while let _ = VideoHandler.pollNal() {}
-    }
-    
     static func currentKeyWindow() -> UIWindow? {
         UIApplication.shared.connectedScenes
             .filter({ $0.activationState == .foregroundActive })
@@ -809,11 +787,12 @@ struct VideoHandler {
         return sampleBuffer
     }
     
-    static func feedVideoIntoDecoder(decompressionSession: VTDecompressionSession, nals: Data, timestamp: UInt64, videoFormat: CMFormatDescription, callback: @escaping (_ imageBuffer: CVImageBuffer?) -> Void) {
+    /// Returns false if the frame couldn't be submitted to the decoder.
+    static func feedVideoIntoDecoder(decompressionSession: VTDecompressionSession, nals: Data, timestamp: UInt64, videoFormat: CMFormatDescription, callback: @escaping (_ imageBuffer: CVImageBuffer?) -> Void) -> Bool {
         var err:OSStatus = 0
         guard let sampleBuffer = annexBBufferToCMSampleBuffer(buffer: nals, videoFormat: videoFormat) else {
             print("Failed in annexBBufferToCMSampleBuffer")
-            return
+            return false
         }
         err = VTDecompressionSessionDecodeFrame(decompressionSession, sampleBuffer: sampleBuffer, flags: ._EnableAsynchronousDecompression, infoFlagsOut: nil) { (status: OSStatus, infoFlags: VTDecodeInfoFlags, imageBuffer: CVImageBuffer?, taggedBuffers: [CMTaggedBuffer]?, presentationTimeStamp: CMTime, presentationDuration: CMTime) in
             //print(status, infoFlags, imageBuffer, taggedBuffers, presentationTimeStamp, presentationDuration)
@@ -822,7 +801,7 @@ struct VideoHandler {
             // If the decoder is failing somehow, request an IDR and get back on track
             if status < 0 && Renderer.shared?.framesSinceLastIDR ?? 0 > 90*2 {
                 Renderer.shared?.framesSinceLastIDR = 0
-                alvr_request_idr()
+                Renderer.shared?.requestIdr()
             }
 
             callback(imageBuffer)
@@ -830,5 +809,6 @@ struct VideoHandler {
         if err != 0 {
             //fatalError("VTDecompressionSessionDecodeFrame")
         }
+        return err == 0
     }
 }

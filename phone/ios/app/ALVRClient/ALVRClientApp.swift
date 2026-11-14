@@ -56,10 +56,6 @@ struct MetalView: UIViewRepresentable {
             renderer.createDecoder()
         }
         
-        func updateFrame() {
-            renderer.updateFrame()
-        }
-        
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
             EventHandler.shared.initialize(size: size)
         }

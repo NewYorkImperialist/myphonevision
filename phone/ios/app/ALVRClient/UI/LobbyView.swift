@@ -137,7 +137,7 @@ struct LobbyView: View {
                     EventHandler.shared.start()
                 }
 
-                Text("Connects to ALVR v20.8.0 on the laptop. Put the headset on facing forward; tap to recenter, hold 1 s to come back here.")
+                Text("Connects to ALVR v21.0.0-dev14 on the laptop (the same server as the Pixel). Put the headset on facing forward; tap to recenter, hold 1 s to come back here.")
                     .fontWeight(.light)
 
                 Button("Test mode (no server)") {

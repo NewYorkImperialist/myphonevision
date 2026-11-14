@@ -7,8 +7,8 @@ Target phone: iPhone 16 Pro, 6.3" OLED, 2622×1206 at 460 ppi, 120 Hz. It sits l
 ## Build
 
 - Code: [app/](app/) started as a copy of [kotleni/iPhoneVR](https://github.com/kotleni/iPhoneVR) at d3683bc (MIT, LICENSE kept), an unofficial ALVR client for iOS. Tracking, the lens pass, reprojection, 120 Hz and test mode are ours.
-- **ALVR v20.8.0** (commit 1d121fa). `app/fetch_alvr.sh` downloads that source into `app/ALVR/` (git-ignored). **The laptop's ALVR server must be v20.8.0 too**, not the Pixel fallback's v21.0.0-dev14.
-- `app/build_and_repack.sh` builds ALVR's client library for iOS into `ALVRClientCore.xcframework` (needs Rust; it adds the `aarch64-apple-ios` target and cbindgen). Xcode 26 also needs `xcodebuild -downloadComponent MetalToolchain` once.
+- **ALVR v21.0.0-dev14** (commit [9f11839](https://github.com/alvr-org/ALVR/commit/9f11839431f95f0df6764790d9a16f8e308a0d79), the source of the 2026.09.30 to 10.03 nightlies and the same commit the Pixel's PhoneVR Release-v1.0.1 is built on). `app/fetch_alvr.sh` downloads that source into `app/ALVR/` (git-ignored), plus the headers of its `openvr` submodule (which GitHub tarballs leave out). **The laptop runs the v21.0.0-dev14 nightly**, the same server as the Pixel fallback.
+- `app/build_and_repack.sh` builds ALVR's client library for iOS into `ALVRClientCore.xcframework` (needs Rust; ALVR pins Rust 1.97.1 in `rust-toolchain.toml`, which rustup installs on first use; the script adds the `aarch64-apple-ios` target and cbindgen). Xcode 26 also needs `xcodebuild -downloadComponent MetalToolchain` once.
 - Signing: put your own settings in `app/Override.xcconfig` (git-ignored): `DEVELOPMENT_TEAM = <your team ID>` and `PRODUCT_BUNDLE_IDENTIFIER = <unique id>`. A free Apple ID works; the app expires after 7 days (re-run from Xcode). Turn on Developer Mode on the phone, and trust the developer under Settings → General → VPN & Device Management.
 - Open `app/ALVRClient.xcodeproj` in Xcode and run, or from the command line:
   ```sh
@@ -31,18 +31,18 @@ Target phone: iPhone 16 Pro, 6.3" OLED, 2622×1206 at 460 ppi, 120 Hz. It sits l
 
 | # | Milestone | State |
 | --- | --- | --- |
-| 1 | **Video:** SteamVR Home on the phone | Code ready; **needs the laptop** with ALVR v20.8.0 (below) |
+| 1 | **Video:** SteamVR Home on the phone | Code ported to the v21 API (library builds, Swift typechecks); **needs the laptop** with the ALVR v21.0.0-dev14 nightly (below) |
 | 2 | **Head pose from ARKit** | Done, checked in test mode: landscape left/right, camera-to-eyes offset (estimate: `WorldTracker.eyesFromCamera`), hold position when tracking is limited, tap to recenter, rotation predicted to display time (≤ 50 ms) |
 | 3 | **Two eyes through the lenses** | Done (`Shaders.metal`: `screenToEye`, `frameUV`); k1/k2 untuned until there are lenses |
 | 4 | **Rotational reprojection** | Done, checked in test mode with 150 ms simulated latency |
 | 5 | **USB link** | Needs the laptop (below) |
 | – | **120 Hz display** | Done; stream at 60–72 Hz, the display reprojects at 120 |
 
-How the stream path works: every display refresh, `EventHandler.sendTracking()` sends ALVR the two eye poses (head ± IPD/2 along the head's right axis) and each eye's FOV from the lens model, for a target time = now + ALVR's prediction offset (nanoseconds). ALVR derives the head pose from the eye views itself (v20.8.0 `client_core/src/lib.rs`), so no separate head motion is sent. Each video frame comes back with the eye poses it was rendered for; the lens pass rotates every eye ray from the current head into that pose (rotation-only reprojection) and looks it up in that eye's half of the frame.
+How the stream path works (ALVR v21 API): every display refresh, `EventHandler.sendTracking()` sends the head pose as the `/user/head` device motion, tagged with a target time = now + the prediction offset (nanoseconds). The two eye views (±IPD/2 along x, in head space, with each eye's FOV from the lens model) go separately through `alvr_send_view_params`, only when the IPD or lens settings change. v21's C API doesn't expose ALVR's prediction offset, so the app learns it: each new frame's display time minus its timestamp nudges the offset (`EventHandler.updatePrediction`, 0 to 100 ms). Video arrives through `alvr_set_decoder_input_callback` on ALVR's video thread and goes straight into VideoToolbox; refusing a frame (decoder error, stall) makes ALVR request a key frame. When a frame is first shown, `alvr_report_compositor_start` returns the eye poses it was rendered for; the lens pass rotates every eye ray from the current head into that pose (rotation-only reprojection) and looks it up in that eye's half of the frame.
 
 ## Laptop setup for milestone 1 (Windows)
 
-1. SteamVR installed. **ALVR v20.8.0** streamer from the [v20.8.0 release](https://github.com/alvr-org/ALVR/releases/tag/v20.8.0) (not the v21 nightly the Pixel uses; ALVR only connects matching versions). Run the ALVR dashboard once so it registers its SteamVR driver.
+1. SteamVR installed. **ALVR v21.0.0-dev14** streamer from the [ALVR nightlies](https://github.com/alvr-org/ALVR-nightly/releases) (any `v21.0.0-dev14+nightly.*` build; the same one the Pixel uses, since ALVR only connects matching versions). Run the ALVR dashboard once so it registers its SteamVR driver.
 2. In the ALVR dashboard: **Headset → Controllers off** (ours come through VMT). Video: preferred refresh rate 60 or 72 to start; H.264 or HEVC both decode on the iPhone; foveated encoding off.
 3. Network: put the laptop and phone on the same network. **The laptop's Wi-Fi hotspot** is the safe choice (campus Wi-Fi usually blocks device-to-device traffic).
 4. On the phone: Start. The iPhone should appear in the ALVR dashboard as a new device: **Trust** it. SteamVR starts streaming; the screen shows SteamVR Home through the lens pass.
