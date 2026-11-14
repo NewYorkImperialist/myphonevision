@@ -29,6 +29,35 @@ class EventHandler: ObservableObject {
     private var alvrEvent: AlvrEvent = AlvrEvent()
     /// Position in the per-sample rotation tag sawtooth (see sendTracking).
     private var tagIndex = 0
+
+    /// A head pose sent to ALVR, kept so frames can be reprojected from the pose they
+    /// were really rendered with when the server's tag is wrong (see Renderer.draw).
+    struct SentPose {
+        let sendNs: UInt64
+        let targetNs: UInt64
+        let orientation: AlvrQuat
+    }
+    /// Time from SteamVR taking its newest pose to the frame reaching the phone
+    /// (render + encode + network). Tune with the server's statistics.
+    static let renderLeadNs: UInt64 = 35_000_000
+    private var sentPoses: [SentPose] = []   // oldest first, about 3 s at 120 Hz
+    private let sentPosesLock = NSLock()
+
+    private func recordSentPose(_ pose: SentPose) {
+        sentPosesLock.lock()
+        sentPoses.append(pose)
+        if sentPoses.count > 400 { sentPoses.removeFirst(sentPoses.count - 400) }
+        sentPosesLock.unlock()
+    }
+
+    /// The pose sent closest to `sendNs`, or nil if none was sent within 100 ms of it.
+    func sentPose(atSendTime sendNs: UInt64) -> SentPose? {
+        sentPosesLock.lock()
+        defer { sentPosesLock.unlock() }
+        let best = sentPoses.min { abs(Int64(bitPattern: $0.sendNs &- sendNs)) < abs(Int64(bitPattern: $1.sendNs &- sendNs)) }
+        guard let best, abs(Int64(bitPattern: best.sendNs &- sendNs)) < 100_000_000 else { return nil }
+        return best
+    }
     /// Eye views (head space) last sent to ALVR; nil = send them on the next tracking update.
     private var sentViewsKey: [Float]? = nil
     /// How far ahead to predict the head: ALVR's pipeline latency, learned from when
@@ -229,6 +258,7 @@ class EventHandler: ObservableObject {
             angular_velocity: (0, 0, 0))
         // The target time doubles as the poll timestamp: frames come back tagged with it.
         alvr_send_tracking(targetNs, &motion, 1, nil, nil)
+        recordSentPose(SentPose(sendNs: Clock.nowNs(), targetNs: targetNs, orientation: motion.pose.orientation))
         Renderer.shared?.lastRequestedTimestamp = targetNs
 
         // Send battery state every 30 secs

@@ -19,6 +19,8 @@ final class Renderer {
     struct QueuedFrame {
         let imageBuffer: CVImageBuffer
         let timestamp: UInt64
+        /// When the frame's data reached the phone (Clock.nowNs).
+        let arrivalNs: UInt64
         /// Eye poses and FOVs the frame was rendered for, from alvr_report_compositor_start
         /// when the frame is first shown. Zero until then (the lens pass falls back).
         var viewParams: [AlvrViewParams] = [AlvrViewParams(), AlvrViewParams()]
@@ -111,8 +113,21 @@ final class Renderer {
             } else if let previous = lastQueuedFrame {
                 frame.viewParams = previous.viewParams
             }
+            // A Linux server can't tell which pose a frame was rendered with (its Vulkan
+            // layer looks for function names that SteamVR's stripped vrcompositor
+            // lacks), so it tags every frame with an arbitrary sample up to 3 s old.
+            // SteamVR renders with its newest pose, so if the tag is far from the pose
+            // we sent just before the frame arrived, reproject from that pose instead.
+            // FOV still comes from the metadata.
+            var poseTimestamp = frame.timestamp
+            if let sent = EventHandler.shared.sentPose(atSendTime: frame.arrivalNs &- EventHandler.renderLeadNs),
+               abs(Int64(bitPattern: frame.timestamp &- sent.targetNs)) > 150_000_000 {
+                frame.viewParams[0].pose.orientation = sent.orientation
+                frame.viewParams[1].pose.orientation = sent.orientation
+                poseTimestamp = sent.targetNs
+            }
             let vsyncNs = UInt64(1e9 / Double(VRSettings.current.displayHz))
-            EventHandler.shared.updatePrediction(frameTimestampNs: frame.timestamp, displayNs: Clock.nowNs() &+ vsyncNs)
+            EventHandler.shared.updatePrediction(frameTimestampNs: poseTimestamp, displayNs: Clock.nowNs() &+ vsyncNs)
             queuedFrame = frame
             lastQueuedFrame = frame
         }
@@ -304,6 +319,7 @@ final class Renderer {
     /// Decode one frame; when decoded, add it to the frameQueue.
     func handleNal(timestamp: UInt64, nal: Data) -> Bool {
         timeLastFrameGot = CACurrentMediaTime()
+        let arrivalNs = Clock.nowNs()
         guard let vtDecompressionSession = vtDecompressionSession, let videoFormat = videoFormat else {
             return false
         }
@@ -345,7 +361,7 @@ final class Renderer {
             framesSinceLastDecode = 0
             alvr_report_frame_decoded(timestamp)
 
-            frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp))
+            frameQueue.append(QueuedFrame(imageBuffer: imageBuffer, timestamp: timestamp, arrivalNs: arrivalNs))
             if frameQueue.count > 3 {
                 frameQueue.removeFirst()
             }
