@@ -1,0 +1,236 @@
+// myphonevision headset shell, fully parametric. OpenSCAD 2021.01+.
+//
+// Pick a part to export (or pass -D 'part="front"' on the command line):
+//   assembly   all parts in place, for checking fit (don't print)
+//   front      lens plate + spacer body as one print; print lens-plate-down
+//   tray       phone tray; print back-down (camera slot on the bed)
+//   door       sliding end door; print flat
+//   shim       focus shim, shim_t thick; print as many as focus needs
+//   jig        single-lens focus test tube (print this first, ~20 min)
+//   jig_ring   1 mm spacer ring for the jig
+//
+// Units are mm. Axes: X along the phone's long edge, Y up, Z from the face
+// (z = 0) toward the phone.
+
+part = "assembly";
+
+// ---- Measure these first (see headset/README.md) --------------------------
+lens_d = 25.0;          // lens diameter, calipers
+lens_thk = 6.0;         // lens edge-to-edge thickness at the rim
+lens_f = 45.0;          // focal length from the window-on-paper test
+focus_back_off = 2.5;   // sit the screen this much inside the focal length
+ipd = 63.0;             // lens center spacing
+
+// ---- Phone: Pixel 7 (check with calipers; add a case's thickness if used) -
+phone_w = 155.6;        // long edge
+phone_h = 73.2;         // short edge
+phone_t = 8.7;          // body thickness, not counting the camera bar
+screen_w = 147.0;
+screen_h = 68.0;
+cam_from_top = 11.0;    // phone top edge to the near edge of the camera bar
+cam_bar_len = 19.0;     // camera bar size along the long edge, plus clearance
+usb_w = 13.0;           // USB-C plug overmold, plus clearance
+usb_h = 8.0;
+
+// ---- Shell ----------------------------------------------------------------
+wall = 2.4;
+clear = 0.6;            // phone clearance per side
+plate_t = 4.0;          // lens plate thickness
+lens_lip = 1.2;         // ledge on the face side that the lens rests on
+lip = 2.0;              // tray lip that holds the phone's screen edge
+shim_t = 1.0;           // focus shim thickness
+shim_count = 2;         // shims fitted at nominal focus (gives +-adjustment)
+nose_w = 38;
+nose_h = 30;
+strap_slot = [4, 32];   // width, height of each strap slot
+bolt_d = 3.4;           // M3 clearance, or a zip tie
+door_t = 2.4;
+vent_w = 3;
+$fn = 96;
+
+// ---- Derived --------------------------------------------------------------
+in_w = phone_w + 2 * clear;
+in_h = phone_h + 2 * clear;
+W = in_w + 2 * wall;
+H = in_h + 2 * wall;
+lens_screen = lens_f - focus_back_off;
+lens_center_z = lens_lip + lens_thk / 2;          // lens optical center, from the face
+tray_face_to_screen = lip;                       // screen sits on the lip
+body_len = lens_screen - (plate_t - lens_center_z) - tray_face_to_screen - shim_count * shim_t;
+tray_t = lip + phone_t + clear + wall;
+flange = 9;             // corner flange size for bolts / zip ties
+
+assert(body_len > 5, str("body_len ", body_len, " is too short: check lens_f and plate_t"));
+assert(ipd / 2 + lens_d / 2 + 1 < W / 2, "lenses don't fit across the shell");
+echo(str("lens-to-screen ", lens_screen, " mm; spacer body ", body_len,
+         " mm; each shim moves focus ", shim_t, " mm"));
+
+// Lens centers, relative to the shell's center.
+lens_pos = [[-ipd / 2, 0], [ipd / 2, 0]];
+
+module centered_box(w, h, t) { translate([-w / 2, -h / 2, 0]) cube([w, h, t]); }
+
+module nose(t) {
+  // Rounded notch up from the bottom edge, between the lenses.
+  translate([0, -H / 2 - 1, -1])
+    hull() {
+      translate([-nose_w / 2, 0, 0]) cube([nose_w, 1, t + 2]);
+      translate([0, nose_h - nose_w / 3, 0]) cylinder(d = nose_w * 0.66, h = t + 2);
+    }
+}
+
+module corner_holes(t) {
+  for (sx = [-1, 1], sy = [-1, 1])
+    translate([sx * (W / 2 + flange / 2 - 1), sy * (H / 2 - flange / 2), -1])
+      cylinder(d = bolt_d, h = t + 2);
+}
+
+module flanges(t) {
+  difference() {
+    for (sx = [-1, 1], sy = [-1, 1])
+      translate([sx * (W / 2 + flange / 2 - 1) - flange / 2, sy * (H / 2 - flange / 2) - flange / 2, 0])
+        cube([flange, flange, t]);
+    corner_holes(t);
+  }
+}
+
+module lens_plate() {
+  difference() {
+    union() {
+      centered_box(W, H, plate_t);
+      // Strap ears on both sides.
+      for (sx = [-1, 1])
+        translate([sx * (W / 2 + 6), 0, 0])
+          difference() {
+            centered_box(14, strap_slot[1] + 10, plate_t);
+            translate([sx * 1, 0, -1]) centered_box(strap_slot[0], strap_slot[1], plate_t + 2);
+          }
+    }
+    for (p = lens_pos) translate([p[0], p[1], 0]) {
+      translate([0, 0, -1]) cylinder(d = lens_d - 2 * 1.2, h = plate_t + 2);  // aperture
+      translate([0, 0, lens_lip]) cylinder(d = lens_d + 0.3, h = plate_t);   // seat
+    }
+    nose(plate_t);
+  }
+}
+
+module body() {
+  translate([0, 0, plate_t]) {
+    difference() {
+      centered_box(W, H, body_len);
+      translate([0, 0, -1]) centered_box(W - 2 * wall, H - 2 * wall, body_len + 2);
+      translate([0, 0, -plate_t]) nose(body_len + plate_t);
+    }
+    // Septum between the eyes, so each eye sees only its half of the screen.
+    difference() {
+      centered_box(1.6, H - 2 * wall, body_len);
+      translate([0, 0, -plate_t]) nose(body_len + plate_t);
+    }
+    translate([0, 0, body_len - 3]) flanges(3);
+  }
+}
+
+module front() { lens_plate(); body(); }
+
+module shim() {
+  difference() {
+    union() {
+      centered_box(W, H, shim_t);
+      flanges(shim_t);
+    }
+    translate([0, 0, -1]) centered_box(W - 2 * wall, H - 2 * wall, shim_t + 2);
+  }
+}
+
+// Phone tray. The phone slides in from the +X end (its USB end) with the
+// screen facing -Z; a door dropped in from the top closes that end and is
+// locked by a 1.75 mm filament pin through the tray's ear and the door's tab.
+// The camera bar end is -X. The tray runs past the shell at +X to hold the door.
+door_x0 = in_w / 2 + 0.2;                  // inner face of the door slot
+door_slot = door_t + 0.4;
+tray_x1 = door_x0 + door_slot + 1.6;       // +X end of the tray
+door_z0 = lip - 1;                         // grooves bite 1 mm into lip and back
+door_len_z = phone_t + clear + 2 - 0.3;
+pin_y = H / 2 + 3;
+pin_z = lip + phone_t / 2;
+
+module tray() {
+  difference() {
+    union() {
+      translate([-W / 2, -H / 2, 0]) cube([tray_x1 + W / 2, H, tray_t]);
+      flanges(3);
+      // Latch ear on top, just inside the door slot.
+      translate([door_x0 - 7, H / 2 - 0.01, lip]) cube([6.8, 6, phone_t]);
+    }
+    // Phone pocket, open at the +X end.
+    translate([-in_w / 2, -in_h / 2, lip]) cube([tray_x1 + in_w / 2 + 1, in_h, phone_t + clear]);
+    // Screen window through the lip.
+    translate([0, 0, -1]) centered_box(screen_w, screen_h, lip + 2);
+    // Camera bar slot through the back, full height so the raised bar clears.
+    translate([-in_w / 2 + cam_from_top, -in_h / 2, lip]) cube([cam_bar_len, in_h, tray_t]);
+    // Vents across the back, clear of the camera slot.
+    for (x = [-in_w / 2 + cam_from_top + cam_bar_len + 8 : vent_w * 3 : in_w / 2 - 10])
+      translate([x, -in_h / 2 + 10, tray_t - wall - 1]) cube([vent_w, in_h - 20, wall + 2]);
+    // Door slot, open through the top wall.
+    translate([door_x0, -in_h / 2 - 0.01, door_z0]) cube([door_slot, H, door_len_z + 0.3]);
+    // Pin hole through the ear (continues through the door's tab).
+    translate([door_x0 - 8, pin_y, pin_z]) rotate([0, 90, 0]) cylinder(d = 2.2, h = 8);
+  }
+}
+
+// Modeled in place (tray coordinates, door seated).
+module door() {
+  difference() {
+    translate([door_x0 + 0.2, -in_h / 2, door_z0 + 0.15])
+      cube([door_t, in_h + wall + 6, door_len_z]);
+    // USB-C pass-through, centered on the phone's edge.
+    translate([door_x0 - 1, -usb_w / 2, pin_z - usb_h / 2])
+      cube([door_t + 2, usb_w, usb_h]);
+    translate([door_x0 - 1, pin_y, pin_z]) rotate([0, 90, 0]) cylinder(d = 2.2, h = door_t + 2);
+  }
+}
+
+module jig() {
+  // Stand it on the phone screen showing a grid; look through the lens.
+  // Add jig_rings until the grid is sharp; ring count tells you the error.
+  jig_h = lens_screen - (lens_thk - lens_center_z) - 2;  // 2 mm short, so rings add focus
+  difference() {
+    cylinder(d = lens_d + 6, h = jig_h + lens_thk);
+    translate([0, 0, -1]) cylinder(d = lens_d - 3, h = jig_h + lens_thk + 2);
+    translate([0, 0, jig_h]) cylinder(d = lens_d + 0.3, h = lens_thk + 1);
+  }
+  echo(str("jig: screen to lens center = ", jig_h + lens_center_z,
+           " mm with no rings; each ring adds 1 mm"));
+}
+
+module jig_ring() {
+  difference() {
+    cylinder(d = lens_d + 6, h = 1);
+    translate([0, 0, -1]) cylinder(d = lens_d - 3, h = 3);
+  }
+}
+
+module phone_ghost() {
+  color("black", 0.6) translate([-phone_w / 2, -phone_h / 2, 0]) cube([phone_w, phone_h, phone_t]);
+}
+
+module assembly() {
+  color("tan") front();
+  stack = plate_t + body_len;
+  for (i = [0 : shim_count - 1]) color("orange") translate([0, 0, stack + i * shim_t]) shim();
+  tray_z = stack + shim_count * shim_t;
+  color("lightblue") translate([0, 0, tray_z]) tray();
+  translate([0, 0, tray_z + lip]) phone_ghost();
+  color("salmon") translate([0, 0, tray_z]) door();
+  for (p = lens_pos)
+    color("white", 0.5) translate([p[0], p[1], lens_lip]) cylinder(d = lens_d, h = lens_thk);
+}
+
+if (part == "assembly") assembly();
+else if (part == "front") front();
+else if (part == "tray") tray();
+else if (part == "door") rotate([0, 90, 0]) translate([-door_x0 - 0.2 - door_t, 0, 0]) door();
+else if (part == "shim") shim();
+else if (part == "jig") jig();
+else if (part == "jig_ring") jig_ring();
+else assert(false, str("unknown part: ", part));

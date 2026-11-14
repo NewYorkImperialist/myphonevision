@@ -1,6 +1,26 @@
 .DS_Store
 .env
 *.log
-node_modules/
+
+# PlatformIO
+.pio/
+.vscode/
+
+# Python
+__pycache__/
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# PhoneVR checkout (lives in its own fork; see phone/README.md)
+phone/PhoneVR/
+
+# CAD exports: regenerate from headset.scad
+*.stl
+*.3mf
+*.gcode
+
 build/
 dist/
+node_modules/
