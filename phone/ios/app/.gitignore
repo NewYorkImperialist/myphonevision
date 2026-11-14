@@ -1,0 +1,7 @@
+libalvr_client_core.dylib
+ALVRClientCore.xcframework
+alvrrepack
+Override.xcconfig
+xcuserdata/
+.DS_Store
+ALVR/

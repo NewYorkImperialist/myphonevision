@@ -6,11 +6,10 @@ Target phone: iPhone 16 Pro, 6.3" OLED, 2622×1206 at 460 ppi, 120 Hz. It sits l
 
 ## Start
 
-- Base: [kotleni/iPhoneVR](https://github.com/kotleni/iPhoneVR), an unofficial ALVR client for iOS. Its README calls it "very unstable": basic streaming and the lobby work; side-by-side view and distortion don't. If it's too broken, adapt the official [alvr-visionos](https://github.com/alvr-org/alvr-visionos) client (Swift/Metal) instead.
-- Build: per the [alvr-visionos wiki](https://github.com/alvr-org/alvr-visionos/wiki/Building), `zsh build_and_repack.sh` builds the ALVR client library, then build the app in Xcode.
-- **ALVR versions must match exactly.** Find the ALVR version or commit the client builds against and post it on issue #3; the laptop's ALVR server must be that same version.
-- Sideload with a free Apple ID (the app expires after 7 days; re-run from Xcode). Turn on Developer Mode on the phone.
-- Keep the app's source in its own fork, not in this repo (its own license and history), like PhoneVR.
+- Code: [app/](app/) is a copy of [kotleni/iPhoneVR](https://github.com/kotleni/iPhoneVR) at d3683bc (MIT, LICENSE kept), an unofficial ALVR client for iOS. Its README calls it "very unstable": basic streaming, the lobby and ARKit tracking work; side-by-side view, distortion and reprojection don't. If it's too broken, adapt the official [alvr-visionos](https://github.com/alvr-org/alvr-visionos) client (Swift/Metal) instead.
+- **ALVR v20.8.0** (commit 1d121fa). `app/fetch_alvr.sh` downloads that source into `app/ALVR/` (git-ignored). **The laptop's ALVR server must be v20.8.0 too**, not the Pixel fallback's v21.0.0-dev14.
+- Build: `app/build_and_repack.sh` builds ALVR's client library for iOS into `ALVRClientCore.xcframework` (needs Rust; it adds the `aarch64-apple-ios` target and cbindgen). Then open `app/ALVRClient.xcworkspace` in Xcode and run on the phone.
+- Signing: put your own settings in `app/Override.xcconfig` (git-ignored): `DEVELOPMENT_TEAM = <your team ID>` and `PRODUCT_BUNDLE_IDENTIFIER = <unique id>`. A free Apple ID works; the app expires after 7 days (re-run from Xcode). Turn on Developer Mode on the phone.
 
 ## Milestones
 
