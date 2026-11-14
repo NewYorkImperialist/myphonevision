@@ -117,12 +117,14 @@ static void calibrateGyro() {
   long stickSum[2] = {0, 0};
   int n = 0;
   bool still = true;
+  float maxDev = 0;
   uint32_t start = millis();
   while (millis() - start < GYRO_CAL_MS) {
     if (imu.read(g, a)) {
       if (n == 0) memcpy(first, g, sizeof(first));
       for (int i = 0; i < 3; i++) {
         sum[i] += g[i];
+        maxDev = fmaxf(maxDev, fabsf(g[i] - first[i]));
         if (fabsf(g[i] - first[i]) > 0.1f) still = false;  // ~6 deg/s
       }
       stickSum[0] += analogRead(PIN_STICK_X);
@@ -142,7 +144,8 @@ static void calibrateGyro() {
     }
     Serial.printf("Stick center %d %d\n", stickCenter[0], stickCenter[1]);
   } else {
-    Serial.println("Moved during calibration; running uncalibrated (power-cycle to retry)");
+    Serial.printf("Moved during calibration (worst %.3f rad/s, %d samples); running uncalibrated\n",
+                  maxDev, n);
   }
   // Seed tilt from gravity only once: re-seeding on a later recalibration ('c')
   // would reset yaw and invalidate the bridge's yaw snap.
@@ -233,7 +236,7 @@ void setup() {
     Serial.println("MPU-6050 not found on I2C; check wiring");
     delay(1000);
   }
-  calibrateGyro();
+  for (int i = 0; i < 3 && !gyroCalibrated; i++) calibrateGyro();  // a bump or noisy sample gets a retry
   setupRadio();
   startHaptic(180, 150);  // buzz once: ready
 }

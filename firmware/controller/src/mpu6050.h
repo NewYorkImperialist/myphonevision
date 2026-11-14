@@ -21,6 +21,7 @@ class Mpu6050 {
     write8(0x19, 0x00);  // sample rate = 1 kHz / (1 + 0)
     write8(0x1B, 0x18);  // gyro +-2000 dps
     write8(0x1C, 0x10);  // accel +-8 g
+    delay(100);  // gyro output settles after wake; earlier samples fail the boot stillness check
     return true;
   }
 
