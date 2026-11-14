@@ -9,12 +9,17 @@ import SwiftUI
 
 /// Lens and screen geometry for the lens pass, saved on the phone.
 /// Defaults come from phone/ios/README.md; tune k1 by eye in test mode.
+/// Lenses: two Carson TriView TV-26, all 3 lenses stacked per eye, in the
+/// headset's sliding focus tubes (headset/headset.scad on branch lens-tubes).
 struct VRSettings {
     var k1: Float = 0.24
     var k2: Float = 0.30
     var ipdMm: Float = 63
-    var screenToLensMm: Float = 42.5   // lens_f - focus_back_off (45 - 2.5 until the lenses are measured)
+    var screenToLensMm: Float = 30.5   // stack's middle to the screen, tubes at nominal: ~20 behind the back glass
+                                       // + half the 21.1 mm stack (= headset.scad lens_f 33 - focus_back_off 2.5)
     var lensYOffsetMm: Float = 0       // lens centers above (+) or below (-) the screen center
+    var fovLimitDeg: Float = 45        // widest angle seen through a lens, per side: the 25.75 mm glass from ~13 mm
+                                       // away. Caps the FOV ALVR renders so pixels aren't spent outside the lens
     var eyeHeightM: Float = 1.65       // head height above the floor after a recenter
     var latencyMs: Float = 0           // test mode only: render the room this late, like the stream
     var reprojection: Float = 1        // 1 on, 0 off
@@ -32,14 +37,21 @@ struct VRSettings {
     static let screenHeightMm: Float = 66.6
     static var current = VRSettings.load()
 
-    private static let keys = ["k1", "k2", "ipdMm", "screenToLensMm", "lensYOffsetMm", "eyeHeightM", "latencyMs", "reprojection", "highRefresh",
+    private static let keys = ["k1", "k2", "ipdMm", "screenToLensMm", "lensYOffsetMm", "fovLimitDeg", "eyeHeightM", "latencyMs", "reprojection", "highRefresh",
                                "passthrough", "keyMode", "keyTolerance", "lidarDepth", "occlusion", "handDistanceM"]
-    private static let paths: [WritableKeyPath<VRSettings, Float>] = [\.k1, \.k2, \.ipdMm, \.screenToLensMm, \.lensYOffsetMm, \.eyeHeightM, \.latencyMs, \.reprojection, \.highRefresh,
+    private static let paths: [WritableKeyPath<VRSettings, Float>] = [\.k1, \.k2, \.ipdMm, \.screenToLensMm, \.lensYOffsetMm, \.fovLimitDeg, \.eyeHeightM, \.latencyMs, \.reprojection, \.highRefresh,
                                                                       \.passthrough, \.keyMode, \.keyTolerance, \.lidarDepth, \.occlusion, \.handDistanceM]
+
+    /// Bump when the lens defaults change for new lenses: phones that saved the old
+    /// lens settings start from the new defaults once (the other settings are kept).
+    private static let lensDefaultsVersion = 2   // 1: 45 mm placeholder lens; 2: Carson TriView 3-stack
+    private static let lensKeys: Set<String> = ["k1", "k2", "screenToLensMm", "fovLimitDeg"]
 
     static func load() -> VRSettings {
         var s = VRSettings()
+        let oldLenses = UserDefaults.standard.integer(forKey: "vr.lensDefaultsVersion") < lensDefaultsVersion
         for (key, path) in zip(keys, paths) {
+            if oldLenses && lensKeys.contains(key) { continue }
             if let v = UserDefaults.standard.object(forKey: "vr." + key) as? Float { s[keyPath: path] = v }
         }
         return s
@@ -49,16 +61,18 @@ struct VRSettings {
         for (key, path) in zip(VRSettings.keys, VRSettings.paths) {
             UserDefaults.standard.set(self[keyPath: path], forKey: "vr." + key)
         }
+        UserDefaults.standard.set(VRSettings.lensDefaultsVersion, forKey: "vr.lensDefaultsVersion")
         VRSettings.current = self
     }
 
     /// Per eye (left, right): tangents of the left, right, up and down edges of what
     /// the eye sees through its lens, with the same lens model as the shader (left
-    /// and down negative). ALVR renders each eye with this FOV.
+    /// and down negative), no wider than fovLimitDeg. ALVR renders each eye with this FOV.
     func eyeFovTangents() -> [SIMD4<Float>] {
+        let limit = min(2.5, tan(fovLimitDeg * .pi / 180))
         func seen(_ d: Float) -> Float {
             let r2 = d * d
-            return max(-2.5, min(2.5, d * (1 + k1 * r2 + k2 * r2 * r2)))
+            return max(-limit, min(limit, d * (1 + k1 * r2 + k2 * r2 * r2)))
         }
         let halfW = VRSettings.screenWidthMm / 2, halfH = VRSettings.screenHeightMm / 2
         let up = seen((halfH - lensYOffsetMm) / screenToLensMm)
@@ -164,7 +178,8 @@ struct LobbyView: View {
             Section("Lenses") {
                 SettingSlider(title: "k1", value: $vr.k1, range: 0...1, step: 0.01, format: "%.2f")
                 SettingSlider(title: "k2", value: $vr.k2, range: 0...1, step: 0.01, format: "%.2f")
-                SettingSlider(title: "Screen to lens (mm)", value: $vr.screenToLensMm, range: 25...70, step: 0.5, format: "%.1f")
+                SettingSlider(title: "Screen to lens (mm)", value: $vr.screenToLensMm, range: 20...70, step: 0.5, format: "%.1f")
+                SettingSlider(title: "FOV limit per side (°)", value: $vr.fovLimitDeg, range: 30...70, step: 1, format: "%.0f")
                 SettingSlider(title: "IPD (mm)", value: $vr.ipdMm, range: 54...74, step: 0.5, format: "%.1f")
                 SettingSlider(title: "Lens height offset (mm)", value: $vr.lensYOffsetMm, range: -10...10, step: 0.5, format: "%.1f")
                 Button("Reset to defaults") { vr = VRSettings() }

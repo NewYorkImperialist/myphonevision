@@ -24,8 +24,9 @@ Target phone: iPhone 16 Pro, 6.3" OLED, 2622×1206 at 460 ppi, 120 Hz. It sits l
 
 - **Start** connects to ALVR on the laptop. **Test mode (no server)** shows a built-in room through the same lens pass, tracking and reprojection as the stream: blue wall ahead, red right, green left, yellow behind, 0.5 m grid, a yellow ball 1.5 m ahead.
 - In either mode: **tap** to recenter (forward = where you look, head at the eye-height setting), **hold 1 s** to return to the lobby.
-- Lobby settings (saved on the phone): k1, k2, screen-to-lens, IPD and lens height (lens pass); eye height; reprojection on/off; 120 Hz on/off; test mode's simulated latency.
-- **With lenses:** set screen-to-lens to `lens_f` − 2.5 mm, then tune k1 in test mode until the grid lines look straight through the lenses.
+- Lobby settings (saved on the phone): k1, k2, screen-to-lens, IPD, lens height and FOV limit (lens pass); eye height; reprojection on/off; 120 Hz on/off; test mode's simulated latency.
+- **Lens defaults: the Carson TriView 3-stack** (two TV-26 magnifiers, all 3 lenses per eye, in the headset's focus tubes). Screen-to-lens **30.5 mm** (stack middle to screen with the tubes at nominal: `lens_f` 33 − 2.5, from Jayden's rough numbers on issue #4). FOV limit **45° per side**, roughly what the 25.75 mm glass shows from 13 mm away; it caps what ALVR renders. Phones with the old 45 mm lens settings saved switch to these once (other settings are kept).
+- **Tuning with the lenses:** slide each focus tube until test mode is sharp, then tune k1 until the room's straight edges look straight. If the picture looks zoomed in or out compared to turning your head, adjust screen-to-lens (the tubes move it about −6 / +8 mm). Raise the FOV limit if you see black at the lens edge, lower it for a sharper picture.
 
 ## Milestones
 
