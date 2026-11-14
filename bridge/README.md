@@ -12,6 +12,14 @@ python -m myphonevision_bridge --no-hmd --debug      # bench test without SteamV
 
 Start SteamVR first: the bridge reads the headset pose through OpenVR.
 
+## Pre-demo check
+
+```sh
+python -m myphonevision_bridge.preflight
+```
+
+Run it before starting the bridge. It checks for the hub on USB, the VMT driver (VMT sends `/VMT/Out/Alive` every few seconds on its own, per its source), the SlimeVR server, and, through SteamVR, the headset, both VMT controllers and the SlimeVR trackers. Each line says OK, WARN or FAIL with the fix, and the exit code is non-zero if anything failed.
+
 ## What it does
 
 - **Pose:** `/VMT/Raw/Driver`, with enable 5 (left) / 6 (right) from the first packet, because VMT latches the device type on first sight. Raw driver space needs no room matrix.
