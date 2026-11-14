@@ -17,13 +17,13 @@ export_parts() {
   local parts=("$@")
   for p in "${parts[@]}"; do
     printf '%-28s' "$(basename "$file" .scad)/$p"
-    openscad --backend=manifold -q -D "part=\"$p\"" "${EXTRA[@]}" -o "$out/$(basename "$file" .scad)-$p.stl" "$file"
+    openscad --backend=manifold -q -D "part=\"$p\"" ${EXTRA[@]+"${EXTRA[@]}"} -o "$out/$(basename "$file" .scad)-$p.stl" "$file"
     echo ok
   done
 }
 
 EXTRA=("$@")
-export_parts headset/headset.scad front tray door shim lens_ring jig jig_ring
+export_parts headset/headset.scad front tray door shim spacer lens_ring jig jig_ring
 export_parts cases/trackers.scad leg_case leg_lid waist_case waist_lid pod_case pod_lid
 export_parts cases/controller.scad head head_base handle
 export_parts cases/fit_tests.scad buttons lens_seats lens_rings phone frames joystick straps

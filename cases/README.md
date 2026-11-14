@@ -13,9 +13,9 @@ Small prints (about 5–25 minutes each) that check each uncertain size before a
 | `buttons` | Which labeled hole (5–16 mm) your push buttons fit through | `button_d` in controller.scad |
 | `lens_seats` | Which seat (lens_d + 0.1 / 0.3 / 0.5 / 0.7 mm) holds the lens snugly without forcing | Add that clearance minus 0.3 to `lens_d` in headset.scad (the headset seat already adds 0.3) |
 | `lens_rings` | Which retaining ring (1–3 notches, loose to tight) press-fits into that seat | Default matches ring 2; tell me if 1 or 3 fits better |
-| `phone` | The Pixel slides into this 10 mm slice of the tray with a little play, screen against the lip | `clear` in headset.scad (bigger if tight) |
+| `phone` | The Pixel slides through this 10 mm slice of the tray, camera end first, with a little play, screen against the lip | `clear` and `cam_bar_h` in headset.scad |
 | `frames` | The 4×AA holder, DevKitC and GY-521 each drop into their outline | `battery`, `devkit`, `imu` in trackers.scad and controller.scad |
-| `joystick` | The joystick board screws onto the posts and the stick moves freely in the hole | `joy_post`, `joy_hole` in controller.scad |
+| `joystick` | The Adafruit 512 board screws onto the posts (M3, 30 mm placeholder spacing) and the stick moves freely in the hole | `joy_post`, `joy_hole` in controller.scad |
 | `straps` | Which slot (25 / 32 / 40 / 52 mm) your headband and bandage thread through | `strap_slot` (headset) and `strap_w` (trackers) |
 
 Print `lens_seats` with your measured `-D lens_d=... -D lens_thk=...`, same as the headset.
@@ -43,6 +43,7 @@ Print `lens_seats` with your measured `-D lens_d=... -D lens_thk=...`, same as t
 
 Print two sets. The same shell works for both hands. The head is 70 × 66 × 43 mm.
 
+- **Layout:** the joystick board (Adafruit 512, 38 mm square) fills the left of the head; B, A and system stand in a column to its right. The file stops with an error if the buttons (`button_body`) won't fit.
 - **Assembly:** joystick board screws to the four posts under the head top. Buttons go through the top holes from inside. The FSR pad sits in the pocket on the handle front, its tail fed in through the slot. The IMU is foam-taped flat to the head's underside, and the battery rests on the rails. Glue or zip-tie the handle into the socket once the wiring works.
 - **Measure first:** `battery`, `joy_board` and `joy_post` (joystick mounting-hole spacing), `button_d` (the lab's buttons), `fsr_d`, and `devkit_h`.
 - After printing, set the bridge's `--mount` to match how the GY-521 sits in the head (see `firmware/controller/README.md`).

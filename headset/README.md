@@ -45,9 +45,10 @@ OpenSCAD: `brew install --cask openscad@snapshot` on macOS (the plain `openscad`
 | `tray` | back down | Holds the phone; the camera bar pokes through the back slot |
 | `door` | flat | Drops in across the USB end; USB-C passes through it |
 | `shim` | flat, print 4 | `shim_count` (2) sit between body and tray at nominal focus; add or remove to refocus |
+| `spacer` | flat | Two rails and a crossbar that slide in behind the phone once it is in, filling the room left for the camera bar |
 | `lens_ring` | flat, print 2 | Press-fits behind each lens (or stack) to hold it in; a dab of glue if loose |
 
-Assembly: drop the lenses into the seats from the tray side and press a `lens_ring` in behind each. Bolt (M3) or zip-tie the four corner flanges: body, then shims, then tray. Slide the phone in from the USB end, screen toward the lenses, camera end first. Drop the door in and push a 1.75 mm filament offcut through the ear and the door tab as the latch pin. Thread a headband through the two side ears. A second band from the top ear over your head takes weight off your face. If your band is wider than 32 mm, fold it or set `strap_slot`.
+Assembly: drop the lenses into the seats from the tray side and press a `lens_ring` in behind each. Bolt (M3) or zip-tie the four corner flanges: body, then shims, then tray. Slide the phone in from the USB end, screen toward the lenses, camera end first: the pocket is deep enough for the camera bar (`cam_bar_h`, measure it). Then slide the `spacer` in behind the phone so it can't rattle. Drop the door in and push a 1.75 mm filament offcut through the ear and the door tab as the latch pin. Thread a headband through the two side ears. A second band from the top ear over your head takes weight off your face. If your band is wider than 32 mm, fold it or set `strap_slot`.
 
 `openscad headset.scad` with `part = "assembly"` shows everything in place. The console echoes the lens-to-screen distance and spacer length; phone fork change 3 needs those numbers.
 
