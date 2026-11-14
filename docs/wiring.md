@@ -125,7 +125,7 @@ Both controllers are wired and tested (wireless on batteries: LEFT ~195 Hz, RIGH
 | ESP32 kit (CP2102N) | 51.5 × 28.23 (measured, issue #7); **35 tall** with the jumper plugs on (estimate) | Female jumpers on the header pins, held with electrical tape. 35 is deeper than the current 28.4 handle |
 | U.FL antenna | not measured | Clips on; tape it along the inside wall, away from the battery |
 | Joystick, Adafruit 512 | 38.08 square, M3 at 30.5 (measured, issue #7) | **Pin header toward the wrist**: `STICK_INVERT_Y 0` assumes that orientation |
-| **A button only** | 16 mm-class panel mount: thread 14.84, ring 19.19 (issue #7) | GPIO 25. **No B, system or grip buttons.** System and recenter will move to a stick hold (bridge change, not built yet) |
+| **A button only** | 16 mm-class panel mount: thread 14.84, ring 19.19 (issue #7) | GPIO 25. **No B, system or grip buttons.** Click and hold the stick (centered): 1 s = recenter, 3 s = system (bridge) |
 | FSR trigger | pad 18.5, tail 7.3 wide | GPIO 32 + 10 kΩ to GND |
 | IMU, LEFT | GY-521 | Flat, chip up |
 | IMU, RIGHT | **Adafruit BNO055**, 25.35 × 20.3 | Flat, chip up, turned the same way as LEFT's GY-521 (one `--mount` serves both hands). Firmware detects it |

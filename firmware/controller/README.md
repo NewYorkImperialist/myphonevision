@@ -22,7 +22,7 @@ Buttons go from the pin to GND (internal pull-up). Wire the FSR from 3V3 to the 
 | Joystick SW | 13 | D9 | |
 | Button A | 25 | D3 | |
 | Button B | 26 | D6 | |
-| System | 27 | D7 | tap = system, hold 1 s = snap yaw to head |
+| System | 27 | D7 | Optional (not on the as-built controllers, which use a stick hold: 1 s recenter, 3 s system). Tap = system, hold 1 s = snap yaw to head |
 | Grip | 14 | D8 | |
 | Haptic motor | 23 | D10 | 1 kΩ to an NPN base; motor from 5V to collector; flyback diode across the motor |
 | Power | 5V pin | 5V pin | 4×AA through a Schottky diode, or an Anker bank on the USB port |
