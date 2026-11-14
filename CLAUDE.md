@@ -26,7 +26,12 @@ Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes co
 1. Check out parts at the hardware desk, P0 first (ESP32 boards, GY-521 / motion sensors). Ask whether you can take Jayden's share (the limit is one of each item per attendee).
 2. Ask the desk: which chip is the "Accelerometer/Gyroscopic Sensor"? Are there 2.4 GHz U.FL antennas? Is the limit per item or per pack?
 3. Measure the lab's 4×AA battery holder, joystick board (and its screw-hole spacing) and push buttons; send the numbers to industrial design.
-4. Flash one controller and wire one motion sensor on a breadboard: [docs/wiring.md](docs/wiring.md) step 2a. Prove the parts work.
+4. **Flash and label every board** (tape labels: HUB, LEFT, RIGHT, WAIST, L-LEG, R-LEG): hub `cd firmware/hub && pio run -t upload`; controllers `cd firmware/controller && pio run -e devkit_left -t upload` (and `devkit_right`); trackers `firmware/slimevr/build.sh upload` (add `WIFI_SSID=… WIFI_PASS=…` for the laptop hotspot).
+5. **Antennas on every board:** U.FL antenna, or a 31 mm wire soldered to the U.FL center pin. Without one, range is under 1 m.
+6. **Test every GY-521 before soldering it in:** wire each to a controller board ([docs/wiring.md](docs/wiring.md) step 2a), type `d` in `pio device monitor`, tilt it, and check roll/pitch follow. Set dead ones aside.
+7. **Soldering prep:** header pins on the GY-521s and joysticks; 3 extension cables (chest, L ankle, R ankle), 4 wires, under 80 cm, order VCC, SDA, GND, SCL; **AD0 to 3V3 on each extension sensor**; Schottky diodes on the battery leads (stripe toward the board).
+8. **One full controller on a breadboard** ([docs/wiring.md](docs/wiring.md) steps 2a–2e), then on the laptop run `python -m myphonevision_bridge --no-hmd --debug` and watch its packets arrive through the hub.
+9. Leave final soldering, case fitting and tuning for Jayden (hour 12). If there's time, breadboard the second controller too.
 
 ### Everyone
 - Decide the main demo: **VRChat with full-body tracking** (the arm model is enough) or **Beat Saber** (needs controller position tracking, rung 2: an iPhone running ZIG SIM, not built yet).
