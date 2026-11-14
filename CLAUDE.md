@@ -56,12 +56,12 @@ Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes co
 ### Everyone
 - Decide the main demo: **VRChat with full-body tracking** (the arm model is enough) or **Beat Saber** (needs controller position tracking, rung 2: an iPhone running ZIG SIM, not built yet).
 
-### Jayden (from hour 12)
-Build both controllers from the tested parts ([docs/wiring.md](docs/wiring.md)), run the bridge, then body tracking, integration, demo and pitch.
+### Jayden (on site since 2026-11-14 midday)
+Build both controllers from the tested parts ([docs/wiring.md](docs/wiring.md)), run the bridge, then integration, demo and pitch. **Lenses:** two Carson TriView TV-26 magnifiers (30 mm lenses, 3x/5.5x, 8.5x stacked) are on their way to Jayden; measure focal length, thickness and ring diameter on arrival and post them to #4.
 
 - **Buttons:** each controller needs 4 (A, B, system, grip; stick click is on the joystick), so 8 total. 3 on hand, parts is sourcing 5 more (issue #2). If short, the **system** button goes on both controllers first: holding it 1 s is the drift reset.
-- **Body tracking:** not enough ESP32 boards or gyro IMUs for SlimeVR (all 3 boards and 2 of 3 MPU-6050s go to the controllers and hub). Plan on **webcam tracking**: [docs/webcam-fbt.md](docs/webcam-fbt.md) (MediaPipe v0.7-beta, VRChat OSC mode, so it can't clash with VMT). Like SlimeVR, it needs head position working (ARKit on the iPhone, ARCore on the Pixel fallback). Switch back to SlimeVR only if 3 more boards and 5–6 gyro IMUs turn up.
-- **Demo games:** native SteamVR games need no changes. Easiest to hardest: SteamVR Home, Fruit Ninja VR, Beat Saber, Minecraft (Vivecraft mod), VRChat with full-body tracking.
+- **Body tracking: cut for now** (team decision, 2026-11-14). Focus on the headset and both controllers. If it comes back: the laptop runs Linux, so `docs/webcam-fbt.md` (a Windows download and Windows-only driver) won't work as written; the idea was our own MediaPipe webcam tracker feeding VMT trackers through the bridge.
+- **Demo games:** native SteamVR games need no changes, but the laptop runs Linux, so most run through Proton (Steam → Settings → Compatibility → enable Steam Play for all titles; start SteamVR before the game). Check a game on db.vronlinux.org or ProtonDB before buying. Easiest to hardest: SteamVR Home, Fruit Ninja VR, Beat Saber, Minecraft (Vivecraft mod).
 
 ## State of the code
 
