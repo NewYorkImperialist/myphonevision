@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="215.9mm" height="279.4mm" viewBox="0 0 215.9 279.4">
+<rect width="215.9" height="279.4" fill="#fff"/>
+<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M87.750,228.600 L87.750,225.300 L53.300,225.300 L53.300,160.800 L48.500,160.800 L48.500,158.300 L45.000,158.300 L45.000,160.800 L40.000,160.800 L40.000,146.800 L45.000,146.800 L45.000,149.300 L48.500,149.300 L48.500,146.800 L53.300,146.800 L53.300,100.800 L48.500,100.800 L48.500,98.300 L45.000,98.300 L45.000,100.800 L40.000,100.800 L40.000,86.800 L45.000,86.800 L45.000,89.300 L48.500,89.300 L48.500,86.800 L53.300,86.800 L53.300,58.300 L87.750,58.300 L87.750,28.500 L90.250,28.500 L90.250,25.500 L87.750,25.500 L87.750,18.500 L90.250,18.500 L90.250,15.500 L87.750,15.500 L87.750,10.000 L107.750,10.000 L107.750,15.500 L105.250,15.500 L105.250,18.500 L107.750,18.500 L107.750,25.500 L105.250,25.500 L105.250,28.500 L107.750,28.500 L107.750,58.300 L142.200,58.300 L142.200,86.800 L147.000,86.800 L147.000,89.300 L150.500,89.300 L150.500,86.800 L155.500,86.800 L155.500,100.800 L150.500,100.800 L150.500,98.300 L147.000,98.300 L147.000,100.800 L142.200,100.800 L142.200,146.800 L147.000,146.800 L147.000,149.300 L150.500,149.300 L150.500,146.800 L155.500,146.800 L155.500,160.800 L150.500,160.800 L150.500,158.300 L147.000,158.300 L147.000,160.800 L142.200,160.800 L142.200,225.300 L107.750,225.300 L107.750,228.600 L87.750,228.600 Z"/>
+<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M63.900,68.900 L63.900,214.700 L131.600,214.700 L131.600,68.900 L63.900,68.900 Z"/>
+<text x="58.50" y="195.60" font-size="6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">F</text>
+<text x="58.50" y="200.10" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">step 5</text>
+<text x="77.75" y="220.10" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">CAM</text>
+<text x="77.75" y="63.50" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">USB</text>
+<text x="58.50" y="121.80" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">TOP</text>
+<path id="p4-scale" class="scale" fill="none" stroke="#000" stroke-width="0.35" d="M10.0,266.4 L60.0,266.4"/>
+<path fill="none" stroke="#000" stroke-width="0.35" d="M10.0,264.4 L10.0,268.4"/>
+<path fill="none" stroke="#000" stroke-width="0.35" d="M60.0,264.4 L60.0,268.4"/>
+<text x="35.0" y="270.4" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">50 mm</text>
+<path fill="none" stroke="#000" stroke-width="0.35" d="M70.0,266.4 L84.0,266.4"/>
+<text x="77.0" y="270.4" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">cut</text>
+<path fill="none" stroke="#000" stroke-width="0.3" stroke-dasharray="3 1.5" d="M96.0,266.4 L110.0,266.4"/>
+<text x="103.0" y="270.4" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">valley fold</text>
+<path fill="none" stroke="#000" stroke-width="0.3" stroke-dasharray="6 1.5 0.8 1.5" d="M122.0,266.4 L136.0,266.4"/>
+<text x="129.0" y="270.4" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">mountain fold</text>
+<path fill="none" stroke="#777" stroke-width="0.2" stroke-dasharray="0.6 1" d="M148.0,266.4 L162.0,266.4"/>
+<text x="155.0" y="270.4" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">guide</text>
+<text x="205.9" y="267.4" font-size="2.6" text-anchor="end" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">T 3 mm   4/6</text>
+</svg>
