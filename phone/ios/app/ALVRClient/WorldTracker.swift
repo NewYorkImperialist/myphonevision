@@ -42,12 +42,21 @@ final class WorldTracker: NSObject, ARSessionDelegate {
 
         configuration = .init()
         configuration.planeDetection = .horizontal
-        // LiDAR depth for AR passthrough (iPhone Pro models); only when it's used, for heat.
+        // AR passthrough extras, only when used (heat): LiDAR depth (depth modes, LiDAR
+        // occlusion) and person segmentation (people & hands occlusion). If the phone
+        // can't run both at once, person segmentation wins.
         let settings = VRSettings.current
-        if settings.passthrough > 0.5, settings.lidarDepth > 0.5 || settings.occlusion > 0.5,
-           ARWorldTrackingConfiguration.supportsFrameSemantics(.smoothedSceneDepth) {
-            configuration.frameSemantics.insert(.smoothedSceneDepth)
+        var wanted: ARConfiguration.FrameSemantics = []
+        if settings.passthrough > 0.5 {
+            if settings.lidarDepth > 0.5 || settings.occlusion > 1.5 { wanted.insert(.smoothedSceneDepth) }
+            if settings.occlusion > 0.5 && settings.occlusion < 1.5 { wanted.insert(.personSegmentationWithDepth) }
         }
+        for option in [wanted, wanted.subtracting(.smoothedSceneDepth), wanted.subtracting(.personSegmentationWithDepth)]
+        where ARWorldTrackingConfiguration.supportsFrameSemantics(option) {
+            configuration.frameSemantics = option
+            break
+        }
+        print("ARKit frame semantics: wanted \(wanted.rawValue), using \(configuration.frameSemantics.rawValue)")
 
         arSession = ARSession()
 
@@ -113,6 +122,7 @@ final class WorldTracker: NSObject, ARSessionDelegate {
         let imageSize: SIMD2<Float>
         let headAtCapture: simd_float4x4      // recentered head pose when it was captured
         let cameraToHead: simd_float4x4       // the head in camera coordinates (head pose = camera pose * this): orientation flip + eye offset
+        let frame: ARFrame                    // for ARMatteGenerator (person segmentation); only the latest is kept
     }
     private var cameraFrame: CameraFrame?
 
@@ -181,7 +191,7 @@ final class WorldTracker: NSObject, ARSessionDelegate {
         cameraFrame = CameraFrame(image: frame.capturedImage,
                                   intrinsics: frame.camera.intrinsics,
                                   imageSize: SIMD2(Float(resolution.width), Float(resolution.height)),
-                                  headAtCapture: headToWorldRecentered, cameraToHead: cameraToHead)
+                                  headAtCapture: headToWorldRecentered, cameraToHead: cameraToHead, frame: frame)
     }
 }
 

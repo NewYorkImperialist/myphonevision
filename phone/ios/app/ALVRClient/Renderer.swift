@@ -120,6 +120,7 @@ final class Renderer {
                 semaphore.signal()
             }
             
+            prepareCamera(commandBuffer: commandBuffer)
             renderStreamingFrame(renderPassDescriptor: renderPassDescriptor, commandBuffer: commandBuffer, drawable: drawable, queuedFrame: queuedFrame!)
             
             commandBuffer.present(drawable)
@@ -144,6 +145,8 @@ final class Renderer {
         var chroma: MTLTexture = placeholderTexture
         var depth: MTLTexture = placeholderTexture
         var depthFull: MTLTexture = placeholderTexture
+        var personMatte: MTLTexture = placeholderTexture
+        var personDepthTex: MTLTexture = placeholderTexture
         if s.passthrough > 0.5, let cam = EventHandler.shared.latestCameraFrame(),
            let y = makePlaneTexture(cam.image, plane: 0, format: .r8Unorm),
            let cbcr = makePlaneTexture(cam.image, plane: 1, format: .rg8Unorm) {
@@ -166,11 +169,16 @@ final class Renderer {
                     c.key.w = 1
                 }
             }
-            // Occlusion: real things in front hide virtual content (full-resolution depth).
-            if s.occlusion > 0.5, let smoothed = EventHandler.shared.smoothedDepth() {
+            // Occlusion: real things in front hide virtual content. Mode 1: ARKit's person
+            // matte (prepared in prepareCamera); mode 2: full-resolution LiDAR depth.
+            if s.occlusion > 1.5, let smoothed = EventHandler.shared.smoothedDepth() {
                 depthFull = depthFullTextures.texture(device: metalDevice, width: smoothed.fullW, height: smoothed.fullH,
                                                       data: smoothed.full, version: smoothed.version)
-                c.occlusion = SIMD4<Float>(1, s.handDistanceM, 0.04, 0)
+                c.occlusion = SIMD4<Float>(1, s.handDistanceM, 0.04, 2)
+            } else if s.occlusion > 0.5, let matte = matteTexture, let personDepth = personDepthTexture {
+                personMatte = matte
+                personDepthTex = personDepth
+                c.occlusion = SIMD4<Float>(1, s.handDistanceM, 0.04, 1)
             }
             commandBuffer.addCompletedHandler { _ in _ = (y, cbcr) }
         }
@@ -179,6 +187,31 @@ final class Renderer {
         encoder.setFragmentTexture(chroma, index: 3)
         encoder.setFragmentTexture(depth, index: 4)
         encoder.setFragmentTexture(depthFull, index: 5)
+        encoder.setFragmentTexture(personMatte, index: 6)
+        encoder.setFragmentTexture(personDepthTex, index: 7)
+    }
+
+    // Person segmentation (ARKit's matte, refined against the camera image) for
+    // "people & hands" occlusion; regenerated once per camera image.
+    private lazy var matteGenerator = ARMatteGenerator(device: metalDevice, matteResolution: .half)
+    private var matteTexture: MTLTexture?
+    private var personDepthTexture: MTLTexture?
+    private var matteFrameTime: Double = -1
+
+    /// Call before creating any render encoder on this command buffer.
+    func prepareCamera(commandBuffer: MTLCommandBuffer) {
+        let s = VRSettings.current
+        guard s.passthrough > 0.5, s.occlusion > 0.5, s.occlusion < 1.5,
+              let cam = EventHandler.shared.latestCameraFrame(), cam.frame.segmentationBuffer != nil else {
+            matteTexture = nil
+            personDepthTexture = nil
+            return
+        }
+        if cam.frame.timestamp != matteFrameTime {
+            matteFrameTime = cam.frame.timestamp
+            matteTexture = matteGenerator.generateMatte(from: cam.frame, commandBuffer: commandBuffer)
+            personDepthTexture = matteGenerator.generateDilatedDepth(from: cam.frame, commandBuffer: commandBuffer)
+        }
     }
 
     private let depthGridTextures = RotatingTexture()
@@ -223,6 +256,7 @@ final class Renderer {
             testDistanceTexture = metalDevice.makeTexture(descriptor: desc)
         }
         guard let commandBuffer = metalCommandQueue.makeCommandBuffer() else { return }
+        prepareCamera(commandBuffer: commandBuffer)
 
         let settings = VRSettings.current
         let now = CACurrentMediaTime()

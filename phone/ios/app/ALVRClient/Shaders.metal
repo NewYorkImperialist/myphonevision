@@ -119,17 +119,24 @@ static float2 projectToCamera(float3 p, constant VRCameraUniforms &c) {
 // distance, read the grid where that point lands in the camera image, move the
 // guess to that depth, repeat. The grid is smooth, so this converges and the warp
 // bends at edges instead of tearing. Each eye gets its own parallax (stereo).
+constexpr sampler nearestSampler(filter::nearest, address::clamp_to_edge);
+
 struct CameraSample {
     float3 color;
-    float realDistance;   // real surface along the eye ray (LiDAR), m; very far if unknown
+    float realDistance;     // real surface along the eye ray (LiDAR), m; very far if unknown
+    float personMatte;      // 1 where ARKit's person segmentation sees a person (hands, arms)
+    float personDistance;   // that person along the eye ray, m; very far if unknown
 };
 
 static CameraSample cameraSample(EyeRay e, constant VRCameraUniforms &c,
                                  texture2d<float, access::sample> camLuma, texture2d<float, access::sample> camChroma,
-                                 texture2d<float, access::sample> camDepth, texture2d<float, access::sample> camDepthFull) {
+                                 texture2d<float, access::sample> camDepth, texture2d<float, access::sample> camDepthFull,
+                                 texture2d<float, access::sample> personMatte, texture2d<float, access::sample> personDepth) {
     CameraSample s;
     s.color = float3(0.0);
     s.realDistance = 1e4;
+    s.personMatte = 0.0;
+    s.personDistance = 1e4;
     if (c.imageSize.w < 0.5) return s;
     float3 dirCam = (c.headToCamera * float4(normalize(float3(e.tanAngle, -1.0)), 0.0)).xyz;
     float3 eyeCam = c.eyeCenter.xyz + e.eyeSign * c.eyeRight.xyz;
@@ -148,19 +155,28 @@ static CameraSample cameraSample(EyeRay e, constant VRCameraUniforms &c,
     float2 uv = projectToCamera(p, c);
     if (any(uv < 0.0) || any(uv > 1.0)) return s;
     s.color = yuvToLinear(camLuma.sample(linearSampler, uv).r, camChroma.sample(linearSampler, uv).rg);
-    // Occlusion uses the full-resolution depth at the same spot, for sharp hand edges.
+    // Occlusion, looked up at the same spot in the camera image: c.occlusion.w is
+    // 1 for ARKit's person matte (sharp, people and hands only), 2 for raw LiDAR.
     if (c.occlusion.x > 0.5 && dirCam.z < -1e-3) {
-        float z = camDepthFull.sample(linearSampler, uv).r;
-        if (z > 0.05) s.realDistance = (-z - eyeCam.z) / dirCam.z;
+        if (c.occlusion.w > 1.5) {
+            float z = camDepthFull.sample(linearSampler, uv).r;
+            if (z > 0.05) s.realDistance = (-z - eyeCam.z) / dirCam.z;
+        } else {
+            s.personMatte = personMatte.sample(linearSampler, uv).r;
+            float z = personDepth.sample(nearestSampler, uv).r;   // dilated past the matte's edge
+            if (z > 0.05) s.personDistance = (-z - eyeCam.z) / dirCam.z;
+        }
     }
     return s;
 }
 
-// How much of the virtual content survives: 0 where the real surface is in front of it.
-static float occlusionAlpha(float realDistance, float virtualDistance, constant VRCameraUniforms &c) {
+// How much of the virtual content survives: 0 where something real is in front of it.
+static float occlusionAlpha(CameraSample cam, float virtualDistance, constant VRCameraUniforms &c) {
     if (c.occlusion.x < 0.5) return 1.0;
     float soft = max(c.occlusion.z, 1e-3);
-    return smoothstep(-soft, soft, realDistance - virtualDistance);
+    if (c.occlusion.w > 1.5) return smoothstep(-soft, soft, cam.realDistance - virtualDistance);
+    float personInFront = 1.0 - smoothstep(-soft, soft, cam.personDistance - virtualDistance);
+    return 1.0 - cam.personMatte * personInFront;
 }
 
 // How opaque a stream pixel is: key-colored pixels (near-black or magenta) let the camera through.
@@ -182,15 +198,17 @@ fragment half4 vrStreamYUV(TextureMappingVertex in [[ stage_in ]],
                            texture2d<float, access::sample> camLuma [[ texture(2) ]],
                            texture2d<float, access::sample> camChroma [[ texture(3) ]],
                            texture2d<float, access::sample> camDepth [[ texture(4) ]],
-                           texture2d<float, access::sample> camDepthFull [[ texture(5) ]]) {
+                           texture2d<float, access::sample> camDepthFull [[ texture(5) ]],
+                           texture2d<float, access::sample> personMatte [[ texture(6) ]],
+                           texture2d<float, access::sample> personDepth [[ texture(7) ]]) {
     EyeRay e = screenToEye(in.renderedCoordinate.xy, u);
     if (!e.valid) return half4(0.0, 0.0, 0.0, 1.0);
     bool passthrough = c.imageSize.w > 0.5;
-    CameraSample cam = cameraSample(e, c, camLuma, camChroma, camDepth, camDepthFull);
+    CameraSample cam = cameraSample(e, c, camLuma, camChroma, camDepth, camDepthFull, personMatte, personDepth);
     float2 uv;
     if (!frameUV(e, f, uv)) return half4(half3(cam.color), 1.0);
     float3 color = yuvToLinear(lumaTexture.sample(linearSampler, uv).r, chromaTexture.sample(linearSampler, uv).rg);
-    float alpha = passthrough ? keyAlpha(color, c) * occlusionAlpha(cam.realDistance, c.occlusion.y, c) : 1.0;
+    float alpha = passthrough ? keyAlpha(color, c) * occlusionAlpha(cam, c.occlusion.y, c) : 1.0;
     return half4(half3(mix(cam.color, color, alpha)), 1.0);
 }
 
@@ -206,18 +224,20 @@ fragment half4 vrStreamRGB(TextureMappingVertex in [[ stage_in ]],
                            texture2d<float, access::sample> camLuma [[ texture(2) ]],
                            texture2d<float, access::sample> camChroma [[ texture(3) ]],
                            texture2d<float, access::sample> camDepth [[ texture(4) ]],
-                           texture2d<float, access::sample> camDepthFull [[ texture(5) ]]) {
+                           texture2d<float, access::sample> camDepthFull [[ texture(5) ]],
+                           texture2d<float, access::sample> personMatte [[ texture(6) ]],
+                           texture2d<float, access::sample> personDepth [[ texture(7) ]]) {
     EyeRay e = screenToEye(in.renderedCoordinate.xy, u);
     if (!e.valid) return half4(0.0, 0.0, 0.0, 1.0);
     bool passthrough = c.imageSize.w > 0.5;
-    CameraSample cam = cameraSample(e, c, camLuma, camChroma, camDepth, camDepthFull);
+    CameraSample cam = cameraSample(e, c, camLuma, camChroma, camDepth, camDepthFull, personMatte, personDepth);
     float2 uv;
     if (!frameUV(e, f, uv)) return half4(half3(cam.color), 1.0);
     float4 frame = frameTexture.sample(linearSampler, uv);
     float alpha = 1.0;
     if (passthrough) {
         float virtualDistance = frameDistance.sample(linearSampler, uv).r;
-        alpha = frame.a * occlusionAlpha(cam.realDistance, virtualDistance, c);
+        alpha = frame.a * occlusionAlpha(cam, virtualDistance, c);
     }
     return half4(half3(mix(cam.color, frame.rgb, alpha)), 1.0);
 }

@@ -23,7 +23,7 @@ struct VRSettings {
     var keyMode: Float = 1             // stream pixels that become see-through: 0 none, 1 near-black, 2 magenta
     var keyTolerance: Float = 0.04     // how close to the key color counts as key (linear RGB)
     var lidarDepth: Float = 1          // passthrough depth: 0 fixed 1.5 m, 1 LiDAR scene average (steady), 2 LiDAR smoothed grid (stereo)
-    var occlusion: Float = 1           // 1: real things in front (LiDAR) hide virtual content
+    var occlusion: Float = 1           // real things in front hide virtual content: 0 off, 1 people & hands (sharp), 2 LiDAR (everything, fuzzy)
     var handDistanceM: Float = 0.7     // stream only (no virtual depth): real things closer than this cut through
 
     var displayHz: Int { highRefresh > 0.5 ? 120 : 60 }
@@ -184,7 +184,11 @@ struct LobbyView: View {
                     Text("LiDAR average").tag(1)
                     Text("LiDAR stereo").tag(2)
                 }
-                Toggle("Real things in front hide virtual ones", isOn: Binding(get: { vr.occlusion > 0.5 }, set: { vr.occlusion = $0 ? 1 : 0 }))
+                Picker("In front of virtual", selection: Binding(get: { Int(vr.occlusion) }, set: { vr.occlusion = Float($0) })) {
+                    Text("Nothing").tag(0)
+                    Text("People & hands").tag(1)
+                    Text("LiDAR (fuzzy)").tag(2)
+                }
                 SettingSlider(title: "Stream: hands closer than (m) cut through", value: $vr.handDistanceM, range: 0.3...1.5, step: 0.05, format: "%.2f")
                 Picker("See-through color (stream)", selection: Binding(get: { Int(vr.keyMode) }, set: { vr.keyMode = Float($0) })) {
                     Text("None").tag(0)
