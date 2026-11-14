@@ -143,6 +143,7 @@ final class Renderer {
         var luma: MTLTexture = placeholderTexture
         var chroma: MTLTexture = placeholderTexture
         var depth: MTLTexture = placeholderTexture
+        var depthFull: MTLTexture = placeholderTexture
         if s.passthrough > 0.5, let cam = EventHandler.shared.latestCameraFrame(),
            let y = makePlaneTexture(cam.image, plane: 0, format: .r8Unorm),
            let cbcr = makePlaneTexture(cam.image, plane: 1, format: .rg8Unorm) {
@@ -160,9 +161,16 @@ final class Renderer {
             if s.lidarDepth > 0.5, let smoothed = EventHandler.shared.smoothedDepth() {
                 c.imageSize.z = smoothed.sceneDepth
                 if s.lidarDepth > 1.5 {
-                    depth = depthGridTexture(smoothed)
+                    depth = depthGridTextures.texture(device: metalDevice, width: DepthSmoother.gridW, height: DepthSmoother.gridH,
+                                                      data: smoothed.grid, version: smoothed.version)
                     c.key.w = 1
                 }
+            }
+            // Occlusion: real things in front hide virtual content (full-resolution depth).
+            if s.occlusion > 0.5, let smoothed = EventHandler.shared.smoothedDepth() {
+                depthFull = depthFullTextures.texture(device: metalDevice, width: smoothed.fullW, height: smoothed.fullH,
+                                                      data: smoothed.full, version: smoothed.version)
+                c.occlusion = SIMD4<Float>(1, s.handDistanceM, 0.04, 0)
             }
             commandBuffer.addCompletedHandler { _ in _ = (y, cbcr) }
         }
@@ -170,31 +178,11 @@ final class Renderer {
         encoder.setFragmentTexture(luma, index: 2)
         encoder.setFragmentTexture(chroma, index: 3)
         encoder.setFragmentTexture(depth, index: 4)
+        encoder.setFragmentTexture(depthFull, index: 5)
     }
 
-    // Three grid textures in rotation, so the CPU never rewrites one a frame in flight reads.
-    private var depthGridTextures: [MTLTexture] = []
-    private var depthGridVersion = -1
-    private var depthGridIndex = 0
-
-    private func depthGridTexture(_ smoothed: DepthSmoother.Result) -> MTLTexture {
-        if depthGridTextures.isEmpty {
-            let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: DepthSmoother.gridW,
-                                                                height: DepthSmoother.gridH, mipmapped: false)
-            desc.usage = .shaderRead
-            depthGridTextures = (0..<3).map { _ in metalDevice.makeTexture(descriptor: desc)! }
-        }
-        if smoothed.version != depthGridVersion {
-            depthGridVersion = smoothed.version
-            depthGridIndex = (depthGridIndex + 1) % depthGridTextures.count
-            smoothed.grid.withUnsafeBytes { bytes in
-                depthGridTextures[depthGridIndex].replace(
-                    region: MTLRegionMake2D(0, 0, DepthSmoother.gridW, DepthSmoother.gridH), mipmapLevel: 0,
-                    withBytes: bytes.baseAddress!, bytesPerRow: DepthSmoother.gridW * MemoryLayout<Float16>.size)
-            }
-        }
-        return depthGridTextures[depthGridIndex]
-    }
+    private let depthGridTextures = RotatingTexture()
+    private let depthFullTextures = RotatingTexture()
 
     private func makePlaneTexture(_ buffer: CVPixelBuffer, plane: Int, format: MTLPixelFormat) -> CVMetalTexture? {
         var texture: CVMetalTexture?
@@ -219,16 +207,20 @@ final class Renderer {
     private var testEyesPipelineState: MTLRenderPipelineState?
     private var frameRGBPipelineState: MTLRenderPipelineState?
     private var testEyesTexture: MTLTexture?
+    private var testDistanceTexture: MTLTexture?   // virtual distance per pixel, for occlusion
     private var poseHistory: [(time: Double, head: simd_float4x4)] = []
 
     func drawTestScene(drawable: CAMetalDrawable, renderPassDescriptor: MTLRenderPassDescriptor) {
         if testEyesPipelineState == nil {
-            testEyesPipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrTestEyes")
+            testEyesPipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrTestEyes",
+                                                                                 secondColorFormat: .r16Float)
             frameRGBPipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrStreamRGB")
             let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: globalPixelFormat, width: 2048, height: 1024, mipmapped: false)
             desc.usage = [.renderTarget, .shaderRead]
             desc.storageMode = .private
             testEyesTexture = metalDevice.makeTexture(descriptor: desc)
+            desc.pixelFormat = .r16Float
+            testDistanceTexture = metalDevice.makeTexture(descriptor: desc)
         }
         guard let commandBuffer = metalCommandQueue.makeCommandBuffer() else { return }
 
@@ -251,6 +243,9 @@ final class Renderer {
         eyesPass.colorAttachments[0].texture = testEyesTexture
         eyesPass.colorAttachments[0].loadAction = .dontCare
         eyesPass.colorAttachments[0].storeAction = .store
+        eyesPass.colorAttachments[1].texture = testDistanceTexture
+        eyesPass.colorAttachments[1].loadAction = .dontCare
+        eyesPass.colorAttachments[1].storeAction = .store
         if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: eyesPass) {
             encoder.label = "Test eyes"
             encoder.setRenderPipelineState(testEyesPipelineState!)
@@ -266,6 +261,7 @@ final class Renderer {
             encoder.setFragmentBytes(&displayUniforms, length: MemoryLayout<VRUniforms>.stride, index: 0)
             encoder.setFragmentBytes(&frameUniforms, length: MemoryLayout<VRFrameUniforms>.stride, index: 1)
             encoder.setFragmentTexture(testEyesTexture, index: 0)
+            encoder.setFragmentTexture(testDistanceTexture, index: 1)
             bindCamera(encoder: encoder, commandBuffer: commandBuffer, displayHead: displayHead)
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
             encoder.endEncoding()
@@ -676,7 +672,8 @@ final class Renderer {
     }
     
     /// Build a render state pipeline object
-    private class func buildRenderPipelineWithDevice(device: MTLDevice, fragment: String = "displayTexture") throws -> MTLRenderPipelineState {
+    private class func buildRenderPipelineWithDevice(device: MTLDevice, fragment: String = "displayTexture",
+                                                     secondColorFormat: MTLPixelFormat? = nil) throws -> MTLRenderPipelineState {
         let library = device.makeDefaultLibrary()
 
         let vertexFunction = library?.makeFunction(name: "mapTexture")
@@ -687,8 +684,37 @@ final class Renderer {
         pipelineDescriptor.vertexFunction = vertexFunction
         pipelineDescriptor.fragmentFunction = fragmentFunction
         pipelineDescriptor.colorAttachments[0].pixelFormat = globalPixelFormat
+        if let secondColorFormat {
+            pipelineDescriptor.colorAttachments[1].pixelFormat = secondColorFormat
+        }
         pipelineDescriptor.depthAttachmentPixelFormat = .invalid
             
         return try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+    }
+}
+
+/// Small Float16 textures updated from the CPU, three in rotation so the CPU never
+/// rewrites one that a frame still in flight is reading.
+final class RotatingTexture {
+    private var textures: [MTLTexture] = []
+    private var version = -1
+    private var index = 0
+    
+    func texture(device: MTLDevice, width: Int, height: Int, data: [Float16], version: Int) -> MTLTexture {
+        if textures.isEmpty || textures[0].width != width || textures[0].height != height {
+            let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .r16Float, width: width, height: height, mipmapped: false)
+            desc.usage = .shaderRead
+            textures = (0..<3).map { _ in device.makeTexture(descriptor: desc)! }
+            self.version = -1
+        }
+        if version != self.version {
+            self.version = version
+            index = (index + 1) % textures.count
+            data.withUnsafeBytes { bytes in
+                textures[index].replace(region: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0,
+                                        withBytes: bytes.baseAddress!, bytesPerRow: width * MemoryLayout<Float16>.size)
+            }
+        }
+        return textures[index]
     }
 }

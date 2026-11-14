@@ -66,6 +66,7 @@ typedef struct
     vector_float4 eyeCenter;      // the eyes' center in camera axes, m
     vector_float4 eyeRight;       // half the IPD along the head's right axis, in camera axes, m
     vector_float4 key;            // stream key: mode (0 none, 1 near-black, 2 magenta), tolerance, softness; w: LiDAR depth bound (1/0)
+    vector_float4 occlusion;      // enabled (1/0), stream's virtual distance m (hands closer cut through), edge softness m, unused
 } VRCameraUniforms;
 
 // The frame being shown (an ALVR video frame, or test mode's rendered eyes).

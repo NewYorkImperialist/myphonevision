@@ -119,10 +119,18 @@ static float2 projectToCamera(float3 p, constant VRCameraUniforms &c) {
 // distance, read the grid where that point lands in the camera image, move the
 // guess to that depth, repeat. The grid is smooth, so this converges and the warp
 // bends at edges instead of tearing. Each eye gets its own parallax (stereo).
-static float3 cameraColor(EyeRay e, constant VRCameraUniforms &c,
-                          texture2d<float, access::sample> camLuma, texture2d<float, access::sample> camChroma,
-                          texture2d<float, access::sample> camDepth) {
-    if (c.imageSize.w < 0.5) return float3(0.0);
+struct CameraSample {
+    float3 color;
+    float realDistance;   // real surface along the eye ray (LiDAR), m; very far if unknown
+};
+
+static CameraSample cameraSample(EyeRay e, constant VRCameraUniforms &c,
+                                 texture2d<float, access::sample> camLuma, texture2d<float, access::sample> camChroma,
+                                 texture2d<float, access::sample> camDepth, texture2d<float, access::sample> camDepthFull) {
+    CameraSample s;
+    s.color = float3(0.0);
+    s.realDistance = 1e4;
+    if (c.imageSize.w < 0.5) return s;
     float3 dirCam = (c.headToCamera * float4(normalize(float3(e.tanAngle, -1.0)), 0.0)).xyz;
     float3 eyeCam = c.eyeCenter.xyz + e.eyeSign * c.eyeRight.xyz;
     float d = c.imageSize.z;
@@ -136,10 +144,23 @@ static float3 cameraColor(EyeRay e, constant VRCameraUniforms &c,
         }
     }
     float3 p = eyeCam + dirCam * d;
-    if (p.z > -1e-3) return float3(0.0);
+    if (p.z > -1e-3) return s;
     float2 uv = projectToCamera(p, c);
-    if (any(uv < 0.0) || any(uv > 1.0)) return float3(0.0);
-    return yuvToLinear(camLuma.sample(linearSampler, uv).r, camChroma.sample(linearSampler, uv).rg);
+    if (any(uv < 0.0) || any(uv > 1.0)) return s;
+    s.color = yuvToLinear(camLuma.sample(linearSampler, uv).r, camChroma.sample(linearSampler, uv).rg);
+    // Occlusion uses the full-resolution depth at the same spot, for sharp hand edges.
+    if (c.occlusion.x > 0.5 && dirCam.z < -1e-3) {
+        float z = camDepthFull.sample(linearSampler, uv).r;
+        if (z > 0.05) s.realDistance = (-z - eyeCam.z) / dirCam.z;
+    }
+    return s;
+}
+
+// How much of the virtual content survives: 0 where the real surface is in front of it.
+static float occlusionAlpha(float realDistance, float virtualDistance, constant VRCameraUniforms &c) {
+    if (c.occlusion.x < 0.5) return 1.0;
+    float soft = max(c.occlusion.z, 1e-3);
+    return smoothstep(-soft, soft, realDistance - virtualDistance);
 }
 
 // How opaque a stream pixel is: key-colored pixels (near-black or magenta) let the camera through.
@@ -151,6 +172,7 @@ static float keyAlpha(float3 rgb, constant VRCameraUniforms &c) {
 }
 
 // The ALVR stream through the lens pass and reprojection, optionally over the camera.
+// The stream has no depth, so occlusion treats it as c.occlusion.y away: hands closer cut through.
 fragment half4 vrStreamYUV(TextureMappingVertex in [[ stage_in ]],
                            constant VRUniforms &u [[ buffer(0) ]],
                            constant VRFrameUniforms &f [[ buffer(1) ]],
@@ -159,37 +181,45 @@ fragment half4 vrStreamYUV(TextureMappingVertex in [[ stage_in ]],
                            texture2d<float, access::sample> chromaTexture [[ texture(1) ]],
                            texture2d<float, access::sample> camLuma [[ texture(2) ]],
                            texture2d<float, access::sample> camChroma [[ texture(3) ]],
-                           texture2d<float, access::sample> camDepth [[ texture(4) ]]) {
+                           texture2d<float, access::sample> camDepth [[ texture(4) ]],
+                           texture2d<float, access::sample> camDepthFull [[ texture(5) ]]) {
     EyeRay e = screenToEye(in.renderedCoordinate.xy, u);
     if (!e.valid) return half4(0.0, 0.0, 0.0, 1.0);
     bool passthrough = c.imageSize.w > 0.5;
-    float3 background = passthrough ? cameraColor(e, c, camLuma, camChroma, camDepth) : float3(0.0);
+    CameraSample cam = cameraSample(e, c, camLuma, camChroma, camDepth, camDepthFull);
     float2 uv;
-    if (!frameUV(e, f, uv)) return half4(half3(background), 1.0);
+    if (!frameUV(e, f, uv)) return half4(half3(cam.color), 1.0);
     float3 color = yuvToLinear(lumaTexture.sample(linearSampler, uv).r, chromaTexture.sample(linearSampler, uv).rg);
-    float alpha = passthrough ? keyAlpha(color, c) : 1.0;
-    return half4(half3(mix(background, color, alpha)), 1.0);
+    float alpha = passthrough ? keyAlpha(color, c) * occlusionAlpha(cam.realDistance, c.occlusion.y, c) : 1.0;
+    return half4(half3(mix(cam.color, color, alpha)), 1.0);
 }
 
 // Test mode's rendered eyes through the same lens pass and reprojection; in
-// passthrough, the eye texture's alpha says where the camera shows through.
+// passthrough, the eye texture's alpha says where the camera shows through, and
+// its distance texture lets real things in front hide the virtual ones.
 fragment half4 vrStreamRGB(TextureMappingVertex in [[ stage_in ]],
                            constant VRUniforms &u [[ buffer(0) ]],
                            constant VRFrameUniforms &f [[ buffer(1) ]],
                            constant VRCameraUniforms &c [[ buffer(2) ]],
                            texture2d<float, access::sample> frameTexture [[ texture(0) ]],
+                           texture2d<float, access::sample> frameDistance [[ texture(1) ]],
                            texture2d<float, access::sample> camLuma [[ texture(2) ]],
                            texture2d<float, access::sample> camChroma [[ texture(3) ]],
-                           texture2d<float, access::sample> camDepth [[ texture(4) ]]) {
+                           texture2d<float, access::sample> camDepth [[ texture(4) ]],
+                           texture2d<float, access::sample> camDepthFull [[ texture(5) ]]) {
     EyeRay e = screenToEye(in.renderedCoordinate.xy, u);
     if (!e.valid) return half4(0.0, 0.0, 0.0, 1.0);
     bool passthrough = c.imageSize.w > 0.5;
-    float3 background = passthrough ? cameraColor(e, c, camLuma, camChroma, camDepth) : float3(0.0);
+    CameraSample cam = cameraSample(e, c, camLuma, camChroma, camDepth, camDepthFull);
     float2 uv;
-    if (!frameUV(e, f, uv)) return half4(half3(background), 1.0);
+    if (!frameUV(e, f, uv)) return half4(half3(cam.color), 1.0);
     float4 frame = frameTexture.sample(linearSampler, uv);
-    float alpha = passthrough ? frame.a : 1.0;
-    return half4(half3(mix(background, frame.rgb, alpha)), 1.0);
+    float alpha = 1.0;
+    if (passthrough) {
+        float virtualDistance = frameDistance.sample(linearSampler, uv).r;
+        alpha = frame.a * occlusionAlpha(cam.realDistance, virtualDistance, c);
+    }
+    return half4(half3(mix(cam.color, frame.rgb, alpha)), 1.0);
 }
 
 // ---- Test mode ----------------------------------------------------------------
@@ -198,7 +228,9 @@ fragment half4 vrStreamRGB(TextureMappingVertex in [[ stage_in ]],
 // Front (-Z) blue, right (+X) red, back (+Z) yellow, left (-X) green.
 // In passthrough there are no walls (alpha 0 lets the camera through); instead a
 // 0.8 x 0.5 m panel floats 1.3 m ahead, left of center, like a Desktop+ window.
-static float4 testRoom(float3 ro, float3 rd, bool passthrough) {
+// `distance` gets the hit distance along rd (m), or 1e4 where nothing is hit.
+static float4 testRoom(float3 ro, float3 rd, bool passthrough, thread float &distance) {
+    distance = 1e4;
     const float3 sphereC[2] = { float3(0.0, 1.6, -1.5), float3(0.5, 1.3, -0.8) };
     const float sphereR[2] = { 0.25, 0.08 };
     const float3 sphereCol[2] = { float3(1.0, 0.8, 0.2), float3(0.9, 0.2, 0.9) };
@@ -218,6 +250,7 @@ static float4 testRoom(float3 ro, float3 rd, bool passthrough) {
             float line = 1.0 - min(min(lineDist.x, lineDist.y), 1.0);
             float titleBar = step(0.9, local.y);
             float3 color = mix(float3(0.08, 0.1, 0.16), float3(0.25, 0.45, 0.9), titleBar);
+            distance = t;
             return float4(mix(color, float3(0.9), line * 0.35), 1.0);
         }
     }
@@ -236,6 +269,7 @@ static float4 testRoom(float3 ro, float3 rd, bool passthrough) {
     if (hitSphere >= 0) {
         float3 n = normalize(p - sphereC[hitSphere]);
         float light = 0.25 + 0.75 * max(dot(n, normalize(float3(0.4, 1.0, 0.3))), 0.0);
+        distance = tHit;
         return float4(sphereCol[hitSphere] * light, 1.0);
     }
     if (passthrough) return float4(0.0);
@@ -255,12 +289,18 @@ static float4 testRoom(float3 ro, float3 rd, bool passthrough) {
     float2 g = uv / 0.5;
     float2 lineDist = abs(fract(g - 0.5) - 0.5) / max(fwidth(g), float2(1e-4));
     float line = 1.0 - min(min(lineDist.x, lineDist.y), 1.0);
+    distance = tHit;
     return float4(mix(base, float3(1.0), line * 0.85), 1.0);
 }
 
+struct TestEyesOut {
+    half4 color [[ color(0) ]];
+    float distance [[ color(1) ]];   // along the eye ray, m (for occlusion)
+};
+
 // Renders the room into a side-by-side eye texture, like the PC renders a frame:
 // u.headToWorld is the (possibly delayed) render pose, f.fovTan each eye's FOV.
-fragment half4 vrTestEyes(TextureMappingVertex in [[ stage_in ]],
+fragment TestEyesOut vrTestEyes(TextureMappingVertex in [[ stage_in ]],
                           constant VRUniforms &u [[ buffer(0) ]],
                           constant VRFrameUniforms &f [[ buffer(1) ]]) {
     float2 uv = in.textureCoordinate;
@@ -271,5 +311,9 @@ fragment half4 vrTestEyes(TextureMappingVertex in [[ stage_in ]],
     float3 eyeInHead = float3((eye == 0 ? -0.0005 : 0.0005) * u.lens.w, 0.0, 0.0);   // half the IPD, mm -> m
     float3 ro = (u.headToWorld * float4(eyeInHead, 1.0)).xyz;
     float3 rd = normalize((u.headToWorld * float4(normalize(float3(tanAngle, -1.0)), 0.0)).xyz);
-    return half4(testRoom(ro, rd, u.misc.y > 0.5));
+    TestEyesOut out;
+    float distance;
+    out.color = half4(testRoom(ro, rd, u.misc.y > 0.5, distance));
+    out.distance = distance;
+    return out;
 }

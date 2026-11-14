@@ -23,6 +23,8 @@ struct VRSettings {
     var keyMode: Float = 1             // stream pixels that become see-through: 0 none, 1 near-black, 2 magenta
     var keyTolerance: Float = 0.04     // how close to the key color counts as key (linear RGB)
     var lidarDepth: Float = 1          // passthrough depth: 0 fixed 1.5 m, 1 LiDAR scene average (steady), 2 LiDAR smoothed grid (stereo)
+    var occlusion: Float = 1           // 1: real things in front (LiDAR) hide virtual content
+    var handDistanceM: Float = 0.7     // stream only (no virtual depth): real things closer than this cut through
 
     var displayHz: Int { highRefresh > 0.5 ? 120 : 60 }
 
@@ -31,9 +33,9 @@ struct VRSettings {
     static var current = VRSettings.load()
 
     private static let keys = ["k1", "k2", "ipdMm", "screenToLensMm", "lensYOffsetMm", "eyeHeightM", "latencyMs", "reprojection", "highRefresh",
-                               "passthrough", "keyMode", "keyTolerance", "lidarDepth"]
+                               "passthrough", "keyMode", "keyTolerance", "lidarDepth", "occlusion", "handDistanceM"]
     private static let paths: [WritableKeyPath<VRSettings, Float>] = [\.k1, \.k2, \.ipdMm, \.screenToLensMm, \.lensYOffsetMm, \.eyeHeightM, \.latencyMs, \.reprojection, \.highRefresh,
-                                                                      \.passthrough, \.keyMode, \.keyTolerance, \.lidarDepth]
+                                                                      \.passthrough, \.keyMode, \.keyTolerance, \.lidarDepth, \.occlusion, \.handDistanceM]
 
     static func load() -> VRSettings {
         var s = VRSettings()
@@ -182,6 +184,8 @@ struct LobbyView: View {
                     Text("LiDAR average").tag(1)
                     Text("LiDAR stereo").tag(2)
                 }
+                Toggle("Real things in front hide virtual ones", isOn: Binding(get: { vr.occlusion > 0.5 }, set: { vr.occlusion = $0 ? 1 : 0 }))
+                SettingSlider(title: "Stream: hands closer than (m) cut through", value: $vr.handDistanceM, range: 0.3...1.5, step: 0.05, format: "%.2f")
                 Picker("See-through color (stream)", selection: Binding(get: { Int(vr.keyMode) }, set: { vr.keyMode = Float($0) })) {
                     Text("None").tag(0)
                     Text("Black").tag(1)

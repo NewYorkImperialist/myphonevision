@@ -44,7 +44,7 @@ final class WorldTracker: NSObject, ARSessionDelegate {
         configuration.planeDetection = .horizontal
         // LiDAR depth for AR passthrough (iPhone Pro models); only when it's used, for heat.
         let settings = VRSettings.current
-        if settings.passthrough > 0.5, settings.lidarDepth > 0.5,
+        if settings.passthrough > 0.5, settings.lidarDepth > 0.5 || settings.occlusion > 0.5,
            ARWorldTrackingConfiguration.supportsFrameSemantics(.smoothedSceneDepth) {
             configuration.frameSemantics.insert(.smoothedSceneDepth)
         }
@@ -195,6 +195,9 @@ final class DepthSmoother {
     static let gridW = 32, gridH = 24
     struct Result {
         let grid: [Float16]       // gridW x gridH, meters along the camera's view axis, row-major from the image's top
+        let full: [Float16]       // the depth map at full resolution (fullW x fullH), for occlusion
+        let fullW: Int
+        let fullH: Int
         let sceneDepth: Float
         let version: Int
     }
@@ -301,8 +304,14 @@ final class DepthSmoother {
         version += 1
         
         let packed = grid.map { Float16($0) }
+        // Full resolution for occlusion (ARKit's smoothed depth is already filtered over time).
+        var full = [Float16](repeating: 0, count: w * h)
+        for y in 0..<h {
+            let row = (depthBase + y * depthRow).assumingMemoryBound(to: Float32.self)
+            for x in 0..<w { full[y * w + x] = Float16(row[x]) }
+        }
         lock.lock()
-        result = Result(grid: packed, sceneDepth: sceneDepth, version: version)
+        result = Result(grid: packed, full: full, fullW: w, fullH: h, sceneDepth: sceneDepth, version: version)
         lock.unlock()
     }
 }
