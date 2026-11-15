@@ -34,7 +34,7 @@ h1{font-size:18px;margin:0 0 10px}.row{display:flex;gap:16px;flex-wrap:wrap;alig
 canvas.small{background:#0b0d16;border-radius:6px}label{display:flex;align-items:center;gap:8px;margin:6px 0}
 label span{width:44px}input[type=range]{flex:1}b{display:inline-block;width:48px;text-align:right}
 button{background:#2b3a66;color:#fff;border:0;border-radius:6px;padding:7px 10px;margin:4px 4px 0 0;cursor:pointer}
-button.big{background:#3a7bd5;font-size:16px;padding:10px 16px}button.scn{background:#5a3a8a}button.cal{background:#1f8a5b;font-size:15px}
+button.big{background:#3a7bd5;font-size:16px;padding:10px 16px}button.scn{background:#5a3a8a}button.scare{background:#c0101a;font-size:22px;font-weight:800;padding:14px 28px;letter-spacing:2px}button.cal{background:#1f8a5b;font-size:15px}
 .stat{color:#9ab;font-size:13px;margin-top:6px}.steps{color:#bcd;margin:6px 0 12px}
 </style></head><body>
 <h1>Sword game admin</h1>
@@ -46,10 +46,11 @@ button.big{background:#3a7bd5;font-size:16px;padding:10px 16px}button.scn{backgr
 <button onclick="post('/command',{cmd:1})">Recenter play area</button>
 <button onclick="post('/command',{cmd:2})">Reset score</button>
 </div>
+<div class="steps"><button class="scare" onclick="post('/command',{cmd:30})">JUMPSCARE</button></div>
 <div class="steps"><b style="width:auto">Scene:</b>
 <button class="scn" onclick="post('/command',{cmd:10})">Neon grid</button><button class="scn" onclick="post('/command',{cmd:11})">Forest</button>
 <button class="scn" onclick="post('/command',{cmd:12})">Space</button><button class="scn" onclick="post('/command',{cmd:13})">Moon</button>
-<button class="scn" onclick="post('/command',{cmd:14})">Volcano</button><button class="scn" onclick="post('/command',{cmd:15})">Study</button>
+<button class="scn" onclick="post('/command',{cmd:14})">Volcano</button>
 &nbsp; <b style="width:auto">Mode:</b>
 <button class="scn" onclick="post('/command',{cmd:20})">Sword game</button><button class="scn" onclick="post('/command',{cmd:21})">Explore (no cubes)</button>
 </div>
@@ -286,7 +287,7 @@ class Tuner:
                     with tuner.lock:
                         tuner.base[hand], tuner.calibrated[hand] = Q.IDENTITY, False
                     tuner.save()
-                elif self.path.startswith("/command") and data.get("cmd") in (1, 2, 10, 11, 12, 13, 14, 15, 20, 21):
+                elif self.path.startswith("/command") and data.get("cmd") in (1, 2, 10, 11, 12, 13, 14, 15, 20, 21, 30):
                     with tuner.lock:
                         tuner.command_id = int(data["cmd"])
                         tuner.command_seq = (tuner.command_seq + 1) % 256

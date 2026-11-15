@@ -10,6 +10,8 @@ import VideoToolbox
 import MetalKit
 import CoreMotion
 import Spatial
+import AVFoundation
+import AudioToolbox
 import ARKit
 
 // TODO: Move to inside Renderer
@@ -363,6 +365,7 @@ final class Renderer {
                     propsVersion = version
                 }
                 encoder.setFragmentBuffer(propsBuffer, offset: 0, index: 3)
+                encoder.setFragmentTexture(Jumpscare.hasCustomImage ? namedTexture("jumpscare_custom") : placeholderTexture, index: 2)
                 saberFrame += 1
                 if saberFrame % 2 == 0 { HandReceiver.shared.sendSpectator(head: renderedHead, scene: scene) }   // 30-60 Hz live view
             }
@@ -865,6 +868,7 @@ final class SaberGame {
     var lastCommandSeq: UInt8? = nil   // first one seen is only remembered, not run
     var sceneId = 0                    // 0 neon grid, 1 forest, 2 space, 3 Moon, 4 volcano (admin page)
     var mode = 0                       // 0 sword game, 1 explore (no cubes or score)
+    var jumpscareAt: Float? = nil      // game time the admin page's Jumpscare started
     private var propsCache: [SIMD4<Float>] = [], propsKey = "", propsVersion = 0
 
     /// The current scene's 3D props (rebuilt when the scene or the play area changes) and a version number.
@@ -916,6 +920,7 @@ final class SaberGame {
             if cmd.id == 1 { anchored = false }            // recenter play area: cubes and scoreboard in front of the player
             if cmd.id == 2 { score = 0; combo = 0 }        // reset score
             if (10...15).contains(cmd.id) { sceneId = Int(cmd.id) - 10 }   // switch scene
+            if cmd.id == 30 { jumpscareAt = t; Jumpscare.play() }         // jumpscare
             if (20...21).contains(cmd.id) {                                // switch mode
                 mode = Int(cmd.id) - 20
                 if mode == 0 { anchored = false } else { cubes.removeAll() }
@@ -1128,6 +1133,8 @@ final class SaberGame {
             box(p.pos, p.rot, p.half * min(1, p.life / 0.4), p.color, p.cutSide * (Float(p.cutAxis) + 1 + 0.9 * heat))
         }
         S[6] = SIMD4(Float(n), t, Float(score), Float(combo))
+        if let js = jumpscareAt, t - js < 1.6 { S[16].w = t - js } else { S[16].w = -1; jumpscareAt = nil }
+        S[2].w = Jumpscare.hasCustomImage ? 1 : 0
         return S
     }
 }
@@ -1168,131 +1175,31 @@ struct SceneProps {
         s.origin = SIMD3<Float>(o.x, 0, o.z)
         s.yaw = atan2(f.x, -f.z)
         typealias V = SIMD3<Float>
-        switch scene {
-        case 1:   // forest: trunks you can walk between, a log, mossy rocks, mushrooms
-            s.ambient = 0.5; s.groundMat = 2; s.groundRadius = 22
-            let bark = V(0.33, 0.22, 0.13)
-            for (x, z, r) in [(-2.5, -3.5, 0.25), (2.2, -4.2, 0.3), (-4.5, -6.0, 0.35), (4.6, -2.0, 0.22), (0.8, -7.5, 0.4),
-                              (-1.0, 3.5, 0.3), (3.8, 3.0, 0.28), (-5.2, 1.0, 0.3), (5.5, -6.5, 0.33), (-3.2, -9.0, 0.4)] as [(Float, Float, Float)] {
-                s.capsule(V(x, -0.2, z), V(x, 7, z), r, bark, mat: 3)
-            }
-            s.capsule(V(-1.8, 0.25, -1.9), V(0.6, 0.3, -2.7), 0.25, V(0.36, 0.24, 0.14), mat: 3)
-            s.capsule(V(1.6, -0.1, -2.6), V(1.6, 0.35, -2.6), 0.3, V(0.4, 0.27, 0.15), mat: 3)
-            for (x, z, r) in [(1.4, -1.5, 0.3), (-3.0, -2.2, 0.5), (2.8, -5.5, 0.6)] as [(Float, Float, Float)] {
-                s.sphere(V(x, r * 0.5, z), r, V(0.30, 0.38, 0.22))
-            }
-            for (x, z) in [(0.4, -1.2), (0.55, -1.35), (-0.9, -2.9)] as [(Float, Float)] {
-                s.capsule(V(x, 0, z), V(x, 0.12, z), 0.02, V(0.9, 0.88, 0.8))
-                s.sphere(V(x, 0.13, z), 0.06, V(0.85, 0.12, 0.1))
-            }
-        case 2:   // space: float around an Earth you can walk all the way round, with the Moon and a satellite orbiting it
-            s.ambient = 0.2
-            s.sun = simd_normalize(V(0.6, 0.35, 0.75))   // behind you: you see Earth's day side, the night side at the edge
-            let earth = V(0, 1.45, -2.3), r: Float = 0.8
-            s.sphere(earth, r, V(1, 1, 1), mat: 2)
-            let ma = time * 0.16                               // Moon: one orbit in about 40 s, slightly tilted
-            s.sphere(earth + V(cos(ma) * 1.7, sin(ma) * 0.35, sin(ma) * 1.7), 0.21, V(0.62, 0.61, 0.58))
-            let sa = -time * 0.33                              // satellite: about 19 s per orbit, the other way
-            let sp = earth + V(cos(sa) * 1.12, 0.25 * cos(sa * 0.5), sin(sa) * 1.12)
-            s.box(sp, V(0.09, 0.09, 0.14), V(0.82, 0.66, 0.26), spin: -sa)
-            let side = simd_quatf(angle: -sa, axis: V(0, 1, 0)).act(V(0.16, 0, 0))
-            s.box(sp + side, V(0.22, 0.008, 0.1), V(0.12, 0.2, 0.55), spin: -sa)
-            s.box(sp - side, V(0.22, 0.008, 0.1), V(0.12, 0.2, 0.55), spin: -sa)
-            s.sphere(sp + V(0, 0.07, 0), 0.015, V(1.0, 0.25, 0.2), mat: 1)
-            s.sphere(s.sun * 90, 4.0, V(1.0, 0.96, 0.85), mat: 1)   // the Sun, where the light comes from
-        case 3:   // Moon: regolith, an Apollo-style lander, a flag, a rover, rocks, Earth in the sky
-            s.ambient = 0.12; s.groundMat = 1; s.groundRadius = 30
-            let silver = V(0.75, 0.75, 0.77)
-            s.box(V(0, 0.95, -5), V(1.7, 0.9, 1.7), V(0.8, 0.63, 0.22), spin: 0.3)
-            s.box(V(0, 1.85, -5), V(1.25, 0.9, 1.15), V(0.7, 0.7, 0.72), spin: 0.3)
-            s.capsule(V(0, 2.3, -5), V(0, 2.75, -5), 0.02, silver)
-            for (dx, dz) in [(-1, -1), (1, -1), (1, 1), (-1, 1)] as [(Float, Float)] {
-                s.capsule(V(dx * 0.85, 0.6, -5 + dz * 0.85), V(dx * 1.4, 0.05, -5 + dz * 1.4), 0.04, silver)
-                s.sphere(V(dx * 1.4, 0.05, -5 + dz * 1.4), 0.15, silver)
-            }
-            s.capsule(V(1.9, 0, -3.6), V(1.9, 1.9, -3.6), 0.015, V(0.85, 0.85, 0.85))
-            s.capsule(V(1.9, 1.85, -3.6), V(2.65, 1.85, -3.6), 0.01, V(0.85, 0.85, 0.85))
-            s.box(V(2.27, 1.6, -3.6), V(0.75, 0.48, 0.01), V(0.9, 0.9, 0.9))
-            s.box(V(2.04, 1.72, -3.594), V(0.3, 0.24, 0.01), V(0.1, 0.15, 0.45))
-            for y in [1.42, 1.53, 1.64, 1.75] as [Float] {
-                s.box(V(y < 1.6 ? 2.27 : 2.45, y, -3.596), V(y < 1.6 ? 0.75 : 0.39, 0.04, 0.01), V(0.7, 0.1, 0.12))
-            }
-            s.box(V(-2.6, 0.55, -3.2), V(1.6, 0.12, 1.0), V(0.6, 0.6, 0.62), spin: 0.5)
-            for (dx, dz) in [(-0.6, -0.45), (0.6, -0.45), (0.6, 0.45), (-0.6, 0.45)] as [(Float, Float)] {
-                let c = simd_quatf(angle: 0.5, axis: V(0, 1, 0)).act(V(dx, 0, dz))
-                s.sphere(V(-2.6 + c.x, 0.3, -3.2 + c.z), 0.3, V(0.3, 0.3, 0.32))
-            }
-            for (x, z, r) in [(-1.5, -2.0, 0.25), (1.2, -1.6, 0.12), (-2.8, -6.0, 0.45), (3.2, -6.5, 0.6),
-                              (-0.7, -1.2, 0.08), (2.4, -2.4, 0.18), (-3.5, -1.5, 0.3), (0.9, -8.5, 0.5)] as [(Float, Float, Float)] {
-                s.sphere(V(x, r * 0.5, z), r, V(0.42, 0.41, 0.40))
-            }
-            s.sphere(V(-15, 18, -45), 3.5, V(1, 1, 1), mat: 2)
-        case 4:   // volcano: basalt with glowing cracks, lava pools, boulders, glowing rocks
-            s.ambient = 0.25; s.groundMat = 3; s.groundRadius = 28
-            s.box(V(0.5, 0.01, -5.0), V(4.5, 0.03, 3.0), V(1, 0.5, 0.1), mat: 4)
-            s.box(V(-3.5, 0.01, -3.0), V(2.0, 0.03, 1.5), V(1, 0.5, 0.1), mat: 4, spin: 0.6)
-            s.sphere(V(0.5, 0.15, -5.0), 0.3, V(1, 0.6, 0.15), mat: 4)
-            for (x, z, r) in [(-1.8, -2.5, 0.6), (2.9, -3.0, 0.45), (-4.0, -6.5, 1.1), (4.5, -7.0, 0.9),
-                              (1.2, -2.0, 0.25), (-2.6, 1.8, 0.7)] as [(Float, Float, Float)] {
-                s.sphere(V(x, r * 0.6, z), r, V(0.08, 0.07, 0.07))
-            }
-            for (x, z) in [(-1.6, -3.4), (2.6, -4.0), (-0.8, -3.2)] as [(Float, Float)] {
-                s.sphere(V(x, 0.08, z), 0.12, V(1.0, 0.35, 0.05), mat: 1)
-            }
-        case 5:   // study: a room with a desk, monitor, lamp, globe, bookshelf, chair, rug and a window
-            s.ambient = 0.55; s.groundMat = 4; s.groundRadius = 8
-            let wall = V(0.78, 0.71, 0.60), wood = V(0.45, 0.28, 0.15), dark = V(0.18, 0.11, 0.06)
-            s.box(V(-2.85, 1.4, -0.55), V(0.1, 2.8, 5.6), wall)
-            s.box(V(2.85, 1.4, -0.55), V(0.1, 2.8, 5.6), wall)
-            s.box(V(0, 1.4, 2.25), V(5.8, 2.8, 0.1), wall)
-            s.box(V(0, 2.85, -0.55), V(5.8, 0.1, 5.7), V(0.86, 0.83, 0.77))
-            s.box(V(-1.9, 1.4, -3.35), V(1.8, 2.8, 0.1), wall)       // front wall around the window
-            s.box(V(1.9, 1.4, -3.35), V(1.8, 2.8, 0.1), wall)
-            s.box(V(0, 0.5, -3.35), V(2.0, 1.0, 0.1), wall)
-            s.box(V(0, 2.5, -3.35), V(2.0, 0.6, 0.1), wall)
-            s.box(V(0, 1.6, -3.33), V(0.05, 1.2, 0.08), dark)
-            s.box(V(0, 1.6, -3.33), V(2.0, 0.05, 0.08), dark)
-            s.box(V(0, 0.98, -3.25), V(2.1, 0.04, 0.25), wood)
-            s.box(V(-1.2, 0.76, -2.55), V(1.6, 0.05, 0.75), wood, mat: 3)   // desk
-            for (x, z) in [(-1.95, -2.88), (-0.45, -2.88), (-1.95, -2.22), (-0.45, -2.22)] as [(Float, Float)] {
-                s.box(V(x, 0.37, z), V(0.05, 0.74, 0.05), dark)
-            }
-            s.box(V(-1.2, 1.12, -2.8), V(0.62, 0.38, 0.03), V(0.05, 0.05, 0.06))     // monitor
-            s.box(V(-1.2, 1.12, -2.783), V(0.57, 0.33, 0.005), V(0.25, 0.55, 1.0), mat: 1, glow: 0.6)
-            s.box(V(-1.2, 0.86, -2.82), V(0.05, 0.16, 0.05), V(0.4, 0.4, 0.42))
-            s.box(V(-1.2, 0.79, -2.45), V(0.45, 0.02, 0.15), V(0.12, 0.12, 0.13))     // keyboard
-            s.box(V(-1.75, 0.815, -2.6), V(0.25, 0.06, 0.18), V(0.55, 0.1, 0.1))
-            s.box(V(-1.75, 0.865, -2.6), V(0.22, 0.04, 0.16), V(0.15, 0.4, 0.2), spin: 0.2)
-            s.capsule(V(-0.6, 0.78, -2.7), V(-0.6, 1.25, -2.7), 0.012, V(0.7, 0.7, 0.72))   // lamp
-            s.sphere(V(-0.6, 1.28, -2.62), 0.08, V(1.0, 0.85, 0.55), mat: 1)
-            s.sphere(V(-1.8, 1.05, -2.35), 0.17, V(1, 1, 1), mat: 2)                   // globe
-            s.capsule(V(-1.8, 0.79, -2.35), V(-1.8, 0.88, -2.35), 0.02, V(0.7, 0.55, 0.25))
-            s.box(V(2.62, 1.0, -2.6), V(0.35, 2.0, 0.04), dark)                         // bookshelf
-            s.box(V(2.62, 1.0, -0.6), V(0.35, 2.0, 0.04), dark)
-            s.box(V(2.78, 1.0, -1.6), V(0.03, 2.0, 2.0), dark)
-            for y in [0.05, 0.5, 0.95, 1.4, 1.95] as [Float] { s.box(V(2.62, y, -1.6), V(0.35, 0.03, 2.0), wood) }
-            let bookColors: [V] = [V(0.55, 0.1, 0.1), V(0.1, 0.25, 0.5), V(0.15, 0.4, 0.2), V(0.6, 0.45, 0.1), V(0.35, 0.15, 0.4), V(0.8, 0.75, 0.6)]
-            var k = 0
-            for shelf in [0.05, 0.5, 0.95, 1.4] as [Float] {
-                var z: Float = -2.5
-                for _ in 0..<5 {
-                    let wdt: Float = 0.05 + Float((k * 37) % 5) * 0.01, h: Float = 0.25 + Float((k * 53) % 6) * 0.025
-                    s.box(V(2.6, shelf + 0.015 + h / 2, z + wdt / 2), V(0.24, h, wdt), bookColors[k % bookColors.count])
-                    z += wdt + 0.02 + Float((k * 29) % 3) * 0.06
-                    k += 1
-                }
-            }
-            s.box(V(-1.2, 0.46, -1.85), V(0.48, 0.05, 0.48), V(0.15, 0.15, 0.17))      // chair
-            s.box(V(-1.2, 0.78, -1.62), V(0.48, 0.6, 0.05), V(0.15, 0.15, 0.17))
-            s.capsule(V(-1.2, 0.05, -1.85), V(-1.2, 0.44, -1.85), 0.025, V(0.4, 0.4, 0.42))
-            s.box(V(0.2, 0.006, -1.0), V(2.4, 0.012, 1.6), V(0.45, 0.12, 0.12))         // rug
-            s.box(V(-2.79, 1.6, -1.0), V(0.02, 0.7, 1.0), dark)                         // painting
-            s.box(V(-2.775, 1.6, -1.0), V(0.01, 0.6, 0.9), V(0.2, 0.35, 0.6))
-            s.capsule(V(2.4, 0, 1.7), V(2.4, 0.45, 1.7), 0.18, V(0.65, 0.33, 0.2))      // plant
-            s.sphere(V(2.4, 0.85, 1.7), 0.35, V(0.15, 0.45, 0.18))
+        switch scene {   // the existing scenes are backgrounds only; ready-made 3D rooms will go here
         default:
             break
         }
         return s.packed()
+    }
+}
+
+
+/// The jumpscare's sound (an original synthesized screech, asset "jumpscare_sound") and buzz.
+/// Drop your own picture into the asset catalog as "jumpscare_custom" to use it instead of the robot face.
+enum Jumpscare {
+    static let hasCustomImage = UIImage(named: "jumpscare_custom") != nil
+    private static var player: AVAudioPlayer?
+
+    static func play() {
+        DispatchQueue.main.async {
+            try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
+            try? AVAudioSession.sharedInstance().setActive(true)
+            if let data = NSDataAsset(name: "jumpscare_sound")?.data, let p = try? AVAudioPlayer(data: data) {
+                p.volume = 1.0
+                p.play()
+                player = p
+            }
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        }
     }
 }

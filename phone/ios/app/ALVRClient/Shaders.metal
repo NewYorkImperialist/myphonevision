@@ -724,13 +724,58 @@ static float4 saberScene(float3 ro, float3 rd, constant float4 *S, constant floa
     return float4(col, 1.0);
 }
 
+
+// ---- Jumpscare: an original animatronic face lunging at you (or a custom image) -------
+// Head-locked, drawn over the scene for 1.6 s after the admin page's Jumpscare button.
+// q: this pixel's view tangent; js: seconds since it started.
+static float3 jumpscare(float2 q, float eyeSign, float js, bool custom, texture2d<float> img) {
+    float fade = 1.0 - smoothstep(1.3, 1.6, js);
+    float s = mix(0.2, 1.25, smoothstep(0.0, 0.16, js)) + 0.05 * sin(js * 40.0);
+    float2 shake = float2(sin(js * 93.0), cos(js * 71.0)) * 0.05 * (1.0 - js / 1.6);
+    float2 p = (q - shake - float2(eyeSign * 0.03, 0.0)) / s;           // face space: the face fills |p| < ~1
+    float strobe = step(0.5, fract(js * 13.0));
+    float3 col = float3(0.55, 0.02, 0.0) * strobe * 0.6;
+    if (custom) {
+        float2 uv = float2(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5);
+        if (all(uv >= 0.0) && all(uv <= 1.0)) col = img.sample(panoSampler, uv).rgb;
+        return col * fade;
+    }
+    float head = length(p * float2(1.0, 0.82)) - 0.85;                  // dented metal skull
+    if (head < 0.0) {
+        float grime = saberFbm(p * 6.0);
+        col = mix(float3(0.32, 0.22, 0.16), float3(0.55, 0.45, 0.36), grime) * (0.55 + 0.45 * (1.0 - length(p)));
+        float seam = smoothstep(0.012, 0.0, abs(p.x)) + smoothstep(0.012, 0.0, abs(p.y - 0.42));
+        col *= 1.0 - 0.6 * seam;
+        col *= 0.8 + 0.2 * smoothstep(0.0, -0.08, head);
+    }
+    for (int e = -1; e <= 1; e += 2) {                                    // eye sockets, pinprick eyes
+        float2 c = float2(0.32 * float(e), 0.2);
+        float d = length(p - c);
+        if (d < 0.17) col = float3(0.0);
+        float2 jitter = float2(sin(js * 57.0 + float(e)), cos(js * 49.0)) * 0.012;
+        float pupil = length(p - c - jitter);
+        col += float3(1.0, 0.95, 0.85) * smoothstep(0.035, 0.0, pupil) * 2.0;
+        col += float3(1.0, 0.2, 0.05) * exp(-pupil * 18.0) * 0.6;
+    }
+    float open = 0.18 + 0.22 * smoothstep(0.05, 0.35, js);                // jaw opens as it lunges
+    float top = -0.12, bottom = top - open;
+    if (abs(p.x) < 0.55 && p.y < top && p.y > bottom) {
+        col = float3(0.02, 0.0, 0.0);
+        float tooth = 1.0 - abs(fract(p.x * 6.5) * 2.0 - 1.0);           // jagged teeth top and bottom
+        if (p.y > top - tooth * 0.13 || p.y < bottom + tooth * 0.11) col = float3(0.82, 0.78, 0.62) * (0.7 + 0.3 * tooth);
+    }
+    float vig = smoothstep(1.9, 0.6, length(q));
+    return col * vig * fade;
+}
+
 fragment TestEyesOut vrSaberEyes(TextureMappingVertex in [[ stage_in ]],
                                  constant VRUniforms &u [[ buffer(0) ]],
                                  constant VRFrameUniforms &f [[ buffer(1) ]],
                                  constant float4 *scene [[ buffer(2) ]],
                                  constant float4 *props [[ buffer(3) ]],
                                  texture2d<float> pano [[ texture(0) ]],
-                                 texture2d<float> earth [[ texture(1) ]]) {
+                                 texture2d<float> earth [[ texture(1) ]],
+                                 texture2d<float> scare [[ texture(2) ]]) {
     float2 uv = in.textureCoordinate;
     int eye = uv.x < 0.5 ? 0 : 1;
     float4 fov = f.fovTan[eye];
@@ -741,7 +786,10 @@ fragment TestEyesOut vrSaberEyes(TextureMappingVertex in [[ stage_in ]],
     float3 rd = normalize((u.headToWorld * float4(normalize(float3(tanAngle, -1.0)), 0.0)).xyz);
     TestEyesOut out;
     float distance;
-    out.color = half4(saberScene(ro, rd, scene, props, pano, earth, distance));
+    float4 c = saberScene(ro, rd, scene, props, pano, earth, distance);
+    float js = scene[16].w;                                              // seconds into a jumpscare, or < 0
+    if (js >= 0.0 && js < 1.6) { c = float4(jumpscare(tanAngle, eye == 0 ? -1.0 : 1.0, js, scene[2].w > 0.5, scare), 1.0); distance = 0.3; }
+    out.color = half4(c);
     out.distance = distance;
     return out;
 }
