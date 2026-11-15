@@ -816,7 +816,7 @@ final class SaberGame {
             if alignPending[h] {   // on start and each tap: whatever way the controller points now becomes forward
                 let f0 = -SIMD3<Float>(m.columns.2.x, 0, m.columns.2.z)
                 if simd_length(f0) > 0.3 {
-                    handYaw[h] = atan2(f0.x, -f0.z)
+                    handYaw[h] = atan2(f0.x, -f0.z) - atan2(fwd.x, -fwd.z)   // controller's heading -> where the head faces
                     alignPending[h] = false
                 }
             }
