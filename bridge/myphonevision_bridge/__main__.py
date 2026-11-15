@@ -20,6 +20,7 @@ from . import quat as Q
 from . import vmt as V
 from .hmd import FixedHmd, SteamVrHmd
 from .pose import MOUNTS, ArmModel, ControllerOrientation, with_pitch_trim
+from .tuner import Tuner
 
 HOLD_TO_SNAP_S = 1.0
 HOLD_TO_SYSTEM_S = 3.0  # stick hold: keep holding past the snap for a system click
@@ -167,11 +168,12 @@ class Hand:
 PHONE_PORT = 39601
 
 
-def phone_packet(hand: int, pos: Q.Vec, rot: Q.Quat) -> bytes:
-    """Hand pose for the iPhone app's sword game: b"MPVH", hand, 3 pad bytes, then
+def phone_packet(hand: int, pos: Q.Vec, rot: Q.Quat, buttons: int = 0) -> bytes:
+    """Hand pose for the iPhone app's sword game: b"MPVH", hand, buttons (bit 0 A,
+    bit 1 stick click, bit 2 "realign" from the tuner page), 2 pad bytes, then
     position x y z (m) and rotation w x y z, little-endian floats, in SteamVR axes
     (+X right, +Y up, -Z forward; the head at x = z = 0 with --no-hmd)."""
-    return struct.pack("<4sB3x7f", b"MPVH", hand, *pos, *rot)
+    return struct.pack("<4sBB2x7f", b"MPVH", hand, buttons & 0xFF, *pos, *rot)
 
 
 def main() -> None:
@@ -217,6 +219,9 @@ def main() -> None:
         fam, _, _, _, phone_addr = socket.getaddrinfo(args.phone, PHONE_PORT, type=socket.SOCK_DGRAM)[0]
         phone_sock = socket.socket(fam, socket.SOCK_DGRAM)
         print(f"Sending hand poses to the phone at {args.phone} port {PHONE_PORT}")
+    tuner = Tuner() if args.phone else None
+    if tuner:
+        tuner.serve()
     squeeze_to = SQUEEZE_TARGETS[args.squeeze]
     arm = ArmModel()
     mount = with_pitch_trim(MOUNTS[args.mount], args.pitch_trim)
@@ -237,6 +242,8 @@ def main() -> None:
             h.last = pkt
             head_pos, head_rot = hmd.pose()
             rot = h.orient.world(pkt.quat)
+            if tuner:
+                rot = tuner.apply(pkt.hand, rot)
             if args.debug_follow:
                 pos = Q.add(head_pos, Q.rotate(Q.rot_y(Q.yaw(head_rot)),
                                                (-0.1 if pkt.hand == 0 else 0.1, -0.1, -0.3)))
@@ -245,7 +252,9 @@ def main() -> None:
             vmt.pose(pkt.hand, h.enable, pos, rot)
             if phone_sock:
                 try:
-                    phone_sock.sendto(phone_packet(pkt.hand, pos, rot), phone_addr)
+                    btn = (1 if pkt.buttons & P.BTN_A else 0) | (2 if pkt.buttons & P.BTN_STICK else 0)
+                    phone_sock.sendto(phone_packet(pkt.hand, pos, rot, btn | tuner.realign_bit()), phone_addr)
+                    tuner.record(pkt.hand, rot, bool(pkt.buttons & P.BTN_A))
                 except OSError:
                     pass   # phone not reachable yet; keep going
 
@@ -289,7 +298,7 @@ def main() -> None:
                 print(f"{name}: yaw snapped to head")
             # Stick hold: the same snap at 1 s, then a system click at 3 s.
             gesture = h.stick_hold.update(bool(b & P.BTN_STICK), pkt.stick, now)
-            if gesture == "snap":
+            if gesture == "snap" and not args.phone:   # the phone game aligns blades itself (triple-click A)
                 h.orient.snap_yaw(pkt.quat, Q.yaw(head_rot))
                 source.send_haptic(pkt.hand, 0.7, 0.15)
                 print(f"{name}: yaw snapped to head (stick hold)")

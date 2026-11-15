@@ -694,6 +694,7 @@ final class HandReceiver {
     private let lock = NSLock()
     private var poses: [simd_float4x4] = [matrix_identity_float4x4, matrix_identity_float4x4]
     private var stamps: [Double] = [0, 0]
+    private var buttonBits: [UInt8] = [0, 0]
     private var started = false
 
     func start() {
@@ -732,9 +733,16 @@ final class HandReceiver {
             m.columns.3 = SIMD4<Float>(f[0], f[1], f[2], 1)
             lock.lock()
             poses[hand] = m
+            buttonBits[hand] = buf[5]
             stamps[hand] = CACurrentMediaTime()
             lock.unlock()
         }
+    }
+
+    /// A hand's buttons: bit 0 A, bit 1 stick click, bit 2 realign (from the bridge's tuner page).
+    func buttons(_ hand: Int) -> UInt8 {
+        lock.lock(); defer { lock.unlock() }
+        return buttonBits[hand]
     }
 
     /// A hand's latest pose, or nil if nothing came in the last half second.
@@ -773,6 +781,8 @@ final class SaberGame {
     var headPos = SIMD3<Float>(0, 1.6, 0), headFwd = SIMD3<Float>(0, 0, -1)
     var handYaw: [Float] = [0, 0]          // turns each controller so it points where you faced at the last tap
     var alignPending = [true, true]
+    var aWasDown = [false, false], realignWasOn = false
+    var aClicks: [[Float]] = [[], []]   // recent A presses: three within 1.2 s realign that blade
     var lastTime: Double = 0
 
     /// Put the play area in front of the current head again (on tap to recenter).
@@ -813,11 +823,27 @@ final class SaberGame {
 
         for h in 0..<2 {
             guard var m = HandReceiver.shared.pose(h) else { blades[h].valid = false; blades[h].length = 0; continue }
-            if alignPending[h] {   // on start and each tap: whatever way the controller points now becomes forward
+            let bits = HandReceiver.shared.buttons(h)
+            let aDown = bits & 1 != 0
+            if aDown && !aWasDown[h] {   // triple-click A: this blade lines up with where you're looking
+                aClicks[h] = aClicks[h].filter { t - $0 < 1.2 } + [t]
+                if aClicks[h].count >= 3 { alignPending[h] = true; aClicks[h].removeAll() }
+            }
+            aWasDown[h] = aDown
+            if h == 0 {   // the tuner page's Realign button: both blades
+                let on = bits & 4 != 0
+                if on && !realignWasOn { alignPending = [true, true] }
+                realignWasOn = on
+            }
+            if alignPending[h] {   // at the start, on a tap, triple-click or Realign: where the controller points becomes where you look
                 let f0 = -SIMD3<Float>(m.columns.2.x, 0, m.columns.2.z)
                 if simd_length(f0) > 0.3 {
                     handYaw[h] = atan2(f0.x, -f0.z) - atan2(fwd.x, -fwd.z)   // controller's heading -> where the head faces
                     alignPending[h] = false
+                    if blades[h].valid {
+                        flashes.append((blades[h].a, SaberGame.colors[h], 0))
+                        if flashes.count > 4 { flashes.removeFirst() }
+                    }
                 }
             }
             m = simd_float4x4(simd_quatf(angle: handYaw[h], axis: SIMD3<Float>(0, 1, 0))) * m   // about the head (x = z = 0)
