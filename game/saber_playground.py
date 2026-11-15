@@ -7,8 +7,8 @@ slice them; a slow touch only pushes them. Cross the two blades for sparks.
 Every hit buzzes the controller. No buttons needed.
 
     python saber_playground.py                      # SteamVR (headset + bridge running)
-    python saber_playground.py --desktop            # no headset: the mouse swings the right blade
-                                                    #   (hold the left mouse button for the left one)
+    python saber_playground.py --desktop            # no headset: the blade tip follows the mouse
+                                                    #   (hold the left mouse button for the left blade)
     python saber_playground.py --desktop --autoplay # both blades swing by themselves
 
 Keys, on the laptop window: T toggles thrown cubes, R resets, C changes blade
@@ -484,6 +484,9 @@ class Game:
         self.anchor = None   # (position, forward) of the head at start: scoreboard and pillars
         self.head = mat4(t=(0, 1.6, 0))
         self.clash_cooldown = 0.0
+        # Where floating cubes appear around the head: all around you in VR (in arm's
+        # reach); --desktop narrows it to the screen.
+        self.spawn_arc, self.spawn_dist, self.spawn_height = 1.9, (0.75, 1.35), (0.85, 1.75)
 
     # -- input --
     def reset(self):
@@ -510,10 +513,10 @@ class Game:
 
     def spawn_float(self):
         pos, f = yaw_frame(self.head)
-        ang = random.uniform(-1.9, 1.9)
+        ang = random.uniform(-self.spawn_arc, self.spawn_arc)
         d = rot_axis((0, 1, 0), ang) @ f
-        home = pos + d * random.uniform(0.75, 1.35)
-        home[1] = random.uniform(0.85, 1.75)
+        home = pos + d * random.uniform(*self.spawn_dist)
+        home[1] = random.uniform(*self.spawn_height)
         hue = random.random()
         color = np.clip(np.abs(np.array([hue * 6 - 3, 2 - abs(hue * 6 - 2), 2 - abs(hue * 6 - 4)])) - [1, 0, 0], 0.15, 1)
         self.targets.append(Target(home.copy(), home, np.zeros(3), random.uniform(0.17, 0.25), color, False))
@@ -863,23 +866,19 @@ def autoplay_hands(t, head, local_dir):
 
 
 class MouseHands:
-    def __init__(self):
-        self.prev = None
-        self.vel = np.zeros(2)
-
-    def hands(self, win, head, dt, t, local_dir):
+    def hands(self, win, head, dt, t, local_dir, fovy_deg=70.0):
+        """The blade's tip follows the cursor; the hilt shifts a little toward it."""
         w, h = glfw.get_window_size(win)
         mx, my = glfw.get_cursor_pos(win)
-        m = np.array([mx / max(w, 1) * 2 - 1, 1 - my / max(h, 1) * 2])
-        if self.prev is not None and dt > 0:
-            self.vel = self.vel * 0.7 + (m - self.prev) / dt * 0.3
-        self.prev = m
+        m = np.clip(np.array([mx / max(w, 1) * 2 - 1, 1 - my / max(h, 1) * 2]), -1, 1)
         pos, f = yaw_frame(head)
         right = np.cross(f, (0, 1, 0))
-        origin = pos + f * 0.45 + right * (m[0] * 0.55) + np.array([0, -0.4 + m[1] * 0.45, 0])
-        lean = np.clip(self.vel * 0.35, -2.5, 2.5)
-        d = np.array([0, 1.0, 0]) * 0.8 + f * 0.6 + right * lean[0] + np.array([0, lean[1] * 0.5, 0])
-        driven = hand_matrix(origin, d, local_dir)
+        up = np.array([0, 1.0, 0])
+        th = math.tan(math.radians(fovy_deg) / 2)
+        ray = normalize(f + right * m[0] * th * w / max(h, 1) + up * m[1] * th)
+        tip = pos + ray * 1.35
+        origin = pos + f * 0.3 + right * (0.1 + m[0] * 0.2) + up * (-0.42 + m[1] * 0.12)
+        driven = hand_matrix(origin, tip - origin, local_dir)
         swap = glfw.get_mouse_button(win, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
         side = 1 if swap else -1  # the idle hand rests on the other side
         idle = pos + f * 0.35 + right * 0.3 * side + np.array([0, -0.5, 0])
@@ -1080,6 +1079,8 @@ def main():
         np.random.seed(args.seed)
     game = Game(args.blade_length, args.blade_pitch)
     game.throw_mode = args.throw
+    if args.desktop:
+        game.spawn_arc, game.spawn_dist, game.spawn_height = 0.5, (0.7, 1.05), (1.15, 1.8)
     (run_desktop if args.desktop else run_vr)(args, game)
 
 

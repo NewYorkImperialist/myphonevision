@@ -26,7 +26,7 @@ Not a copy of any game: original code, shapes drawn from cubes and capsules, no 
 ## Run it without a headset
 
 ```
-python game/saber_playground.py --desktop             # the mouse swings the right blade; hold the left button for the left one
+python game/saber_playground.py --desktop             # the blade tip follows the mouse; hold the left button for the left blade
 python game/saber_playground.py --desktop --autoplay  # both blades swing by themselves
 ```
 
