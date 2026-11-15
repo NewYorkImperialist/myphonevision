@@ -706,17 +706,19 @@ final class HandReceiver {
     }
 
     private func run() {
-        let fd = socket(AF_INET, SOCK_DGRAM, 0)
+        // IPv6 socket that also takes IPv4: some carriers' hotspots are IPv6-only.
+        let fd = socket(AF_INET6, SOCK_DGRAM, 0)
         guard fd >= 0 else { print("HandReceiver: no socket"); return }
-        var one: Int32 = 1
+        var one: Int32 = 1, off: Int32 = 0
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, socklen_t(MemoryLayout<Int32>.size))
-        var addr = sockaddr_in()
-        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = HandReceiver.port.bigEndian
-        addr.sin_addr = in_addr(s_addr: 0)
+        setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &off, socklen_t(MemoryLayout<Int32>.size))
+        var addr = sockaddr_in6()
+        addr.sin6_len = UInt8(MemoryLayout<sockaddr_in6>.size)
+        addr.sin6_family = sa_family_t(AF_INET6)
+        addr.sin6_port = HandReceiver.port.bigEndian
+        addr.sin6_addr = in6addr_any
         let bound = withUnsafePointer(to: &addr) {
-            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in6>.size)) }
         }
         guard bound == 0 else { print("HandReceiver: bind failed"); close(fd); return }
         var buf = [UInt8](repeating: 0, count: 128)
@@ -768,18 +770,23 @@ final class SaberGame {
     var score = 0, combo = 0
     var t: Float = 0, lastSlice: Float = -10, spawnTimer: Float = 0
     var anchorPos = SIMD3<Float>(0, 1.6, 0), anchorFwd = SIMD3<Float>(0, 0, -1), anchored = false
+    var headPos = SIMD3<Float>(0, 1.6, 0), headFwd = SIMD3<Float>(0, 0, -1)
+    var handYaw: [Float] = [0, 0]          // turns each controller so it points where you faced at the last tap
+    var alignPending = [true, true]
     var lastTime: Double = 0
 
     /// Put the play area in front of the current head again (on tap to recenter).
     func recenter() {
         lock.lock(); defer { lock.unlock() }
         anchored = false
+        alignPending = [true, true]
     }
 
     func reset() {
         lock.lock(); defer { lock.unlock() }
         cubes.removeAll(); pieces.removeAll(); flashes.removeAll()
         score = 0; combo = 0; anchored = false; lastTime = 0
+        alignPending = [true, true]
         blades = [Blade(), Blade()]
     }
 
@@ -796,6 +803,7 @@ final class SaberGame {
         let hp = SIMD3<Float>(head.columns.3.x, head.columns.3.y, head.columns.3.z)
         var fwd = -SIMD3<Float>(head.columns.2.x, 0, head.columns.2.z)
         fwd = simd_length(fwd) > 1e-3 ? simd_normalize(fwd) : SIMD3(0, 0, -1)
+        headPos = hp; headFwd = fwd
         if !anchored {   // start (or recenter): the cubes and the scoreboard go in front of where you face
             anchorPos = hp; anchorFwd = fwd; anchored = true
             cubes.removeAll(); pieces.removeAll()
@@ -805,6 +813,14 @@ final class SaberGame {
 
         for h in 0..<2 {
             guard var m = HandReceiver.shared.pose(h) else { blades[h].valid = false; blades[h].length = 0; continue }
+            if alignPending[h] {   // on start and each tap: whatever way the controller points now becomes forward
+                let f0 = -SIMD3<Float>(m.columns.2.x, 0, m.columns.2.z)
+                if simd_length(f0) > 0.3 {
+                    handYaw[h] = atan2(f0.x, -f0.z)
+                    alignPending[h] = false
+                }
+            }
+            m = simd_float4x4(simd_quatf(angle: handYaw[h], axis: SIMD3<Float>(0, 1, 0))) * m   // about the head (x = z = 0)
             m.columns.3.x += hp.x   // the bridge places hands for a head at x = z = 0
             m.columns.3.z += hp.z
             var b = blades[h]
@@ -861,11 +877,11 @@ final class SaberGame {
     }
 
     private func spawn() {
-        var home = anchorPos
-        for _ in 0..<12 {
-            let ang = SaberGame.rnd(-1.1, 1.1)
-            let dir = simd_quatf(angle: ang, axis: SIMD3(0, 1, 0)).act(anchorFwd)
-            home = anchorPos + dir * SaberGame.rnd(0.75, 1.25)
+        var home = headPos
+        for _ in 0..<12 {   // in front of where you're facing now
+            let ang = SaberGame.rnd(-0.9, 0.9)
+            let dir = simd_quatf(angle: ang, axis: SIMD3(0, 1, 0)).act(headFwd)
+            home = headPos + dir * SaberGame.rnd(0.75, 1.25)
             home.y = SaberGame.rnd(0.95, 1.7)
             if cubes.allSatisfy({ simd_length($0.home - home) > 0.45 }) { break }
         }

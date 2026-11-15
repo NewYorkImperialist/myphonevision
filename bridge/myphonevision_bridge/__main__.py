@@ -212,9 +212,11 @@ def main() -> None:
             sys.exit(f"Couldn't reach SteamVR ({e}). Start SteamVR first, or pass --no-hmd.")
 
     vmt = V.Vmt(args.vmt_host)
-    phone_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) if args.phone else None
-    if args.phone:
-        print(f"Sending hand poses to the phone at {args.phone}:{PHONE_PORT}")
+    phone_sock, phone_addr = None, None
+    if args.phone:   # IPv4 or IPv6 (e.g. fe80::...%en0 on an IPv6-only hotspot)
+        fam, _, _, _, phone_addr = socket.getaddrinfo(args.phone, PHONE_PORT, type=socket.SOCK_DGRAM)[0]
+        phone_sock = socket.socket(fam, socket.SOCK_DGRAM)
+        print(f"Sending hand poses to the phone at {args.phone} port {PHONE_PORT}")
     squeeze_to = SQUEEZE_TARGETS[args.squeeze]
     arm = ArmModel()
     mount = with_pitch_trim(MOUNTS[args.mount], args.pitch_trim)
@@ -243,7 +245,7 @@ def main() -> None:
             vmt.pose(pkt.hand, h.enable, pos, rot)
             if phone_sock:
                 try:
-                    phone_sock.sendto(phone_packet(pkt.hand, pos, rot), (args.phone, PHONE_PORT))
+                    phone_sock.sendto(phone_packet(pkt.hand, pos, rot), phone_addr)
                 except OSError:
                     pass   # phone not reachable yet; keep going
 

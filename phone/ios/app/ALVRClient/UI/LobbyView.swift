@@ -224,7 +224,7 @@ struct LobbyView: View {
                     isPresentedLobby.update()
                 }
 
-                Text("The phone runs the sword game itself. On the laptop: python -m myphonevision_bridge --no-hmd --phone 172.20.10.1. Face forward and tap to recenter, hold each thumbstick 1 s to line up that hand, hold the screen 1 s to come back here.")
+                Text("The phone runs the sword game itself. On the laptop: python -m myphonevision_bridge --no-hmd --phone 172.20.10.1. Look forward, point both controllers forward and tap: the cubes, scoreboard and both blades line up with where you face. Hold the screen 1 s to come back here.")
                     .fontWeight(.light)
             }
 
