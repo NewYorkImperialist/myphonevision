@@ -3,9 +3,8 @@
     python3 laser.py [--v2]      # writes laser/ (or v2/laser/): one .svg, .dxf and .pdf per page
                                  # --v2 also writes headset-v2-recut-sheet.svg/.pdf: every part v2 changes, on one sheet
 
-Every line is a 0.01 mm hairline (the makerspace's "cut" convention); the color says what to do with it:
-red = cut through, blue = score (fold lines; run at low power). Score lines are dashed (6 mm on, 1.5 mm off), so
-even if they get cut at full power the part stays attached and folds along a perforation.
+Makerspace convention: 0.01 mm strokes are cut, anything wider is engraved. Red 0.01 mm = cut through;
+blue 0.5 mm = fold lines, engraved at low power so they score the top liner.
 """
 import math, os, subprocess, sys, runpy
 from shapely import affinity
@@ -15,28 +14,7 @@ v2 = "--v2" in sys.argv[1:]
 out = os.path.join(here, "v2" if v2 else "", "laser")
 sys.argv = ["gen.py"] + (["--v2"] if v2 else [])
 g = runpy.run_path(os.path.join(here, "gen.py"))
-HAIR, RED, BLUE = 0.01, "#ff0000", "#0000ff"
-DASH, GAP = 6.0, 1.5
-
-
-def dashes(pts):
-    """Split a polyline into DASH-long pieces with GAP between them."""
-    segs, cur, left, on = [], [pts[0]], DASH, True
-    for a, b in zip(pts, pts[1:]):
-        L = math.dist(a, b)
-        t = 0.0
-        while L - t > left:
-            t += left
-            p = (a[0] + (b[0] - a[0]) * t / L, a[1] + (b[1] - a[1]) * t / L)
-            if on:
-                segs.append(cur + [p])
-            cur, on = [p], not on
-            left = GAP if not on else DASH
-        left -= L - t
-        cur.append(b)
-    if on and len(cur) > 1:
-        segs.append(cur)
-    return segs
+HAIR, SCORE_W, RED, BLUE = 0.01, 0.5, "#ff0000", "#0000ff"
 
 
 def write(name, w, h, cuts, scores):
@@ -50,7 +28,7 @@ def write(name, w, h, cuts, scores):
     dxf += ["0", "ENDTAB", "0", "ENDSEC", "0", "SECTION", "2", "ENTITIES"]
     for pts, closed, color, layer in [(c, True, RED, "CUT") for c in cuts] + [(s, False, BLUE, "SCORE") for s in scores]:
         d = "M" + " L".join(f"{x:.3f},{y:.3f}" for x, y in pts) + (" Z" if closed else "")
-        svg.append(f'<path fill="none" stroke="{color}" stroke-width="{HAIR}" d="{d}"/>')
+        svg.append(f'<path fill="none" stroke="{color}" stroke-width="{HAIR if closed else SCORE_W}" d="{d}"/>')
         if closed and pts[0] == pts[-1]:
             pts = pts[:-1]
         dxf += ["0", "POLYLINE", "8", layer, "66", "1", "70", "1" if closed else "0"]
@@ -71,8 +49,8 @@ PW, PH = g["PW"], g["PH"]
 flip = lambda pts: [(x, PH - y) for x, y in pts]
 for n, pg in enumerate(g["pages"], 1):
     cuts = [flip(geom.coords) for kind, geom, _ in pg["paths"] if kind == "cut"]
-    scores = [s for kind, geom, _ in pg["paths"] if kind in ("mountain", "valley") for s in dashes(flip(geom.coords))]
-    print(f"page {n}: {write(f'headset-page{n}', PW, PH, cuts, scores)} (cuts, score dashes)")
+    scores = [flip(geom.coords) for kind, geom, _ in pg["paths"] if kind in ("mountain", "valley")]
+    print(f"page {n}: {write(f'headset-page{n}', PW, PH, cuts, scores)} (cuts, scores)")
 
 if v2:
     # Everything v2 changes, on one sheet: R1, R2 / A, B + FH, SC + SU. No spacers (P, PL, K), nothing unchanged.
@@ -94,5 +72,5 @@ if v2:
     w = math.ceil(max(s.bounds[2] for s in shapes) + M)
     h = math.ceil(max(s.bounds[3] for s in shapes) + M)
     cuts = [list(r.coords) for s in shapes for poly in getattr(s, "geoms", [s]) for r in [poly.exterior, *poly.interiors]]
-    scores = [d for _, ls in placed.values() for l in ls for d in dashes(list(l.coords))]
-    print(f"sheet {w} x {h} mm: {write('headset-v2-recut-sheet', w, h, cuts, scores)} (cuts, score dashes)")
+    scores = [list(l.coords) for _, ls in placed.values() for l in ls]
+    print(f"sheet {w} x {h} mm: {write('headset-v2-recut-sheet', w, h, cuts, scores)} (cuts, scores)")
