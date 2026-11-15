@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import socket
 import struct
 import threading
@@ -20,6 +21,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from . import quat as Q
 
 SPECTATOR_PORT = 39602
+SAVE = os.path.expanduser("~/.myphonevision-tuner.json")   # calibration and sliders survive bridge restarts
+ZERO = {"yaw": 0.0, "pitch": 0.0, "roll": 0.0, "height": 0.0, "forward": 0.0, "side": 0.0}
 
 PAGE = r"""<!doctype html><html><head><meta charset="utf-8"><title>Sword game tuner</title>
 <style>
@@ -34,9 +37,15 @@ button{background:#2b3a66;color:#fff;border:0;border-radius:6px;padding:7px 10px
 button.big{background:#3a7bd5;font-size:16px;padding:10px 16px}button.cal{background:#1f8a5b;font-size:15px}
 .stat{color:#9ab;font-size:13px;margin-top:6px}.steps{color:#bcd;margin:6px 0 12px}
 </style></head><body>
-<h1>Sword game tuner</h1>
-<div class="steps"><b style="width:auto">Calibrate:</b> 1) point a controller straight <b style="width:auto">up</b> and click its green Calibrate button &nbsp; 2) have the player point both controllers <b style="width:auto">forward</b> and click
-<button class="big" onclick="post('/realign',{})">Realign blades</button></div>
+<h1>Sword game admin</h1>
+<div id="status" class="steps">connecting...</div>
+<div class="steps">
+<button class="cal big" onclick="post('/calibrate',{hand:0});post('/calibrate',{hand:1})">Calibrate both (held straight up)</button>
+<button class="cal" onclick="countdown()" id="cd">Calibrate both in 3 s</button>
+<button class="big" onclick="post('/realign',{})">Realign blades (pointing forward)</button>
+<button onclick="post('/command',{cmd:1})">Recenter play area</button>
+<button onclick="post('/command',{cmd:2})">Reset score</button>
+</div>
 <div class="row"><canvas id="view" width="1280" height="720"></canvas><div id="hands"></div></div>
 <script>
 const names=["Left","Right"],colors=["#3b8cff","#ff5a2a"];
@@ -46,13 +55,16 @@ for(let h=0;h<2;h++){H.insertAdjacentHTML("beforeend",`<div class="hand" style="
 <div class="views"><div><canvas class="small" id="top${h}" width="190" height="190"></canvas><div class="stat">from above (up = forward)</div></div>
 <div><canvas class="small" id="side${h}" width="190" height="190"></canvas><div class="stat">from the side (left = forward)</div></div></div>
 ${["yaw","pitch","roll"].map(k=>`<label><span>${k}</span><input type="range" min="-180" max="180" step="5" id="${k}${h}" oninput="send(${h})"><b id="${k}v${h}">0</b></label>`).join("")}
+${["height","forward","side"].map(k=>`<label><span>${k}</span><input type="range" min="-50" max="50" step="1" id="${k}${h}" oninput="send(${h})"><b id="${k}v${h}">0</b></label>`).join("")}
 <button onclick="bump(${h},'pitch',180)">Flip</button><button onclick="bump(${h},'yaw',180)">Turn around</button><button onclick="zero(${h})">Reset</button>
 <div class="stat" id="stat${h}">waiting...</div></div>`)}
 function post(u,b){return fetch(u,{method:"POST",body:JSON.stringify(b)})}
 function wrap(a){return((a+180)%360+360)%360-180}
-function send(h){const o={hand:h};for(const k of["yaw","pitch","roll"]){o[k]=+document.getElementById(k+h).value;document.getElementById(k+"v"+h).textContent=o[k]}post("/set",o)}
+const KEYS=["yaw","pitch","roll","height","forward","side"];
+function send(h){const o={hand:h};for(const k of KEYS){o[k]=+document.getElementById(k+h).value;document.getElementById(k+"v"+h).textContent=o[k]+(["height","forward","side"].includes(k)?" cm":"°")}post("/set",o)}
+function countdown(){const b=document.getElementById("cd");let n=3;b.textContent="Hold them up... "+n;const t=setInterval(()=>{n--;if(n>0){b.textContent="Hold them up... "+n}else{clearInterval(t);post('/calibrate',{hand:0});post('/calibrate',{hand:1});b.textContent="Calibrated!";setTimeout(()=>b.textContent="Calibrate both in 3 s",1500)}},1000)}
 function bump(h,k,d){const e=document.getElementById(k+h);e.value=wrap(+e.value+d);send(h)}
-function zero(h){for(const k of["yaw","pitch","roll"])document.getElementById(k+h).value=0;send(h);post('/uncalibrate',{hand:h})}
+function zero(h){for(const k of KEYS)document.getElementById(k+h).value=0;send(h);post('/uncalibrate',{hand:h})}
 function arrow(c,x,y,col){const g=c.getContext("2d"),s=c.width/2;g.clearRect(0,0,c.width,c.height);g.strokeStyle="#334";g.beginPath();g.arc(s,s,s*0.8,0,7);g.moveTo(s,8);g.lineTo(s,c.height-8);g.moveTo(8,s);g.lineTo(c.width-8,s);g.stroke();
 g.strokeStyle=col;g.lineWidth=5;g.beginPath();g.moveTo(s,s);g.lineTo(s+x*s*0.8,s+y*s*0.8);g.stroke();g.fillStyle=col;g.beginPath();g.arc(s+x*s*0.8,s+y*s*0.8,6,0,7);g.fill();g.lineWidth=1}
 // ---- live view: the player's eye, drawn from the phone's game state ----
@@ -82,11 +94,13 @@ function noView(msg){G.fillStyle="#05060c";G.fillRect(0,0,V.width,V.height);G.fi
 let first=true;
 async function tick(){try{const s=await (await fetch("/state")).json();
 if(s.scene&&s.scene.age<1)drawScene(s.scene);else noView("Waiting for the phone (start the sword game)");
-for(let h=0;h<2;h++){const d=s.hands[h];if(first){for(const k of["yaw","pitch","roll"]){document.getElementById(k+h).value=s.offsets[h][k];document.getElementById(k+"v"+h).textContent=s.offsets[h][k]}}
+for(let h=0;h<2;h++){const d=s.hands[h];if(first){for(const k of KEYS){document.getElementById(k+h).value=s.offsets[h][k]||0;document.getElementById(k+"v"+h).textContent=(s.offsets[h][k]||0)}}
 if(!d||d.age>0.5){document.getElementById("stat"+h).textContent="no data (controller off?)";continue}
 const fw=d.forward;arrow(document.getElementById("top"+h),fw[0],fw[2],colors[h]);arrow(document.getElementById("side"+h),fw[2],-fw[1],colors[h]);
 const pitch=Math.round(Math.asin(Math.max(-1,Math.min(1,fw[1])))*180/Math.PI);
-document.getElementById("stat"+h).textContent=`${d.rate} Hz · blade ${pitch>=0?"up":"down"} ${Math.abs(pitch)}° · ${d.calibrated?"calibrated":"not calibrated"} · A ${d.a?"down":"up"}`}
+document.getElementById("stat"+h).innerHTML=`${d.rate} Hz · blade ${pitch>=0?"up":"down"} ${Math.abs(pitch)}° · ${d.calibrated?"calibrated":"<b style='color:#fb4;width:auto'>NOT calibrated</b>"} · A ${d.a?"down":"up"}${d.gyro?"":" · <b style='color:#f66;width:auto'>gyro drifting: power-cycle it held still</b>"}`}
+const ph=s.scene&&s.scene.age<1,ok=h=>s.hands[h]&&s.hands[h].age<0.5;
+document.getElementById("status").innerHTML=`Phone: ${ph?"<b style='color:#5d5;width:auto'>connected</b>":"<b style='color:#f66;width:auto'>no game data</b>"} &nbsp; Left: ${ok(0)?s.hands[0].rate+" Hz":"off"} &nbsp; Right: ${ok(1)?s.hands[1].rate+" Hz":"off"}`;
 first=false}catch(e){}setTimeout(tick,33)}
 tick();
 </script></body></html>"""
@@ -104,9 +118,11 @@ def _from_to(a: Q.Vec, b: Q.Vec) -> Q.Quat:
 class Tuner:
     def __init__(self) -> None:
         self.lock = threading.Lock()
-        self.offsets = {0: {"yaw": 0.0, "pitch": 0.0, "roll": 0.0}, 1: {"yaw": 0.0, "pitch": 0.0, "roll": 0.0}}
+        self.offsets = {0: dict(ZERO), 1: dict(ZERO)}
         self.base: dict[int, Q.Quat] = {0: Q.IDENTITY, 1: Q.IDENTITY}   # from Calibrate
         self.calibrated = {0: False, 1: False}
+        self.command_id, self.command_seq = 0, 0   # one-shot commands for the phone (1 recenter play area, 2 reset score)
+        self.load()
         self.raw: dict[int, Q.Quat] = {}
         self.latest: dict[int, dict] = {}
         self.stamps: dict[int, list[float]] = {0: [], 1: []}
@@ -125,6 +141,38 @@ class Tuner:
         q = Q.mul(q, Q.axis_angle((0.0, 0.0, 1.0), math.radians(o["roll"])))
         return Q.normalize(Q.mul(Q.mul(rot, base), q))
 
+    def load(self) -> None:
+        try:
+            with open(SAVE) as fh:
+                d = json.load(fh)
+            for h in (0, 1):
+                self.offsets[h] = dict(ZERO, **d["offsets"][h])
+                self.base[h] = tuple(d["base"][h])
+                self.calibrated[h] = bool(d["calibrated"][h])
+            print(f"Tuner: loaded calibration from {SAVE}")
+        except (OSError, ValueError, KeyError, IndexError, TypeError):
+            pass
+
+    def save(self) -> None:
+        with self.lock:
+            d = {"offsets": [self.offsets[0], self.offsets[1]], "base": [list(self.base[0]), list(self.base[1])],
+                 "calibrated": [self.calibrated[0], self.calibrated[1]]}
+        try:
+            with open(SAVE, "w") as fh:
+                json.dump(d, fh)
+        except OSError:
+            pass
+
+    def offset_pos(self, hand: int, pos: Q.Vec) -> Q.Vec:
+        """Height, forward and side nudges (cm) for this hand."""
+        with self.lock:
+            o = self.offsets[hand]
+            return (pos[0] + o["side"] / 100.0, pos[1] + o["height"] / 100.0, pos[2] - o["forward"] / 100.0)
+
+    def command(self) -> tuple[int, int]:
+        with self.lock:
+            return self.command_id, self.command_seq
+
     def calibrate_up(self, hand: int) -> None:
         """The controller is pointing straight up: its blade axis is whatever body axis points up now."""
         with self.lock:
@@ -134,16 +182,18 @@ class Tuner:
             b = Q.rotate(Q.conj(raw), (0.0, 1.0, 0.0))
             self.base[hand] = _from_to((0.0, 0.0, -1.0), b)
             self.calibrated[hand] = True
-            self.offsets[hand] = {"yaw": 0.0, "pitch": 0.0, "roll": 0.0}
+            self.offsets[hand].update(yaw=0.0, pitch=0.0, roll=0.0)
+        self.save()
         print(f"{'left' if hand == 0 else 'right'}: calibrated (blade axis in the controller: "
               f"{tuple(round(c, 2) for c in b)})")
 
-    def record(self, hand: int, rot: Q.Quat, a_down: bool) -> None:
+    def record(self, hand: int, rot: Q.Quat, a_down: bool, gyro_ok: bool = True) -> None:
         now = time.monotonic()
         with self.lock:
             st = [t for t in self.stamps[hand] if now - t < 1.0] + [now]
             self.stamps[hand] = st
-            self.latest[hand] = {"forward": Q.rotate(rot, (0.0, 0.0, -1.0)), "t": now, "rate": len(st), "a": a_down}
+            self.latest[hand] = {"forward": Q.rotate(rot, (0.0, 0.0, -1.0)), "t": now, "rate": len(st), "a": a_down,
+                                 "gyro": gyro_ok}
 
     def realign_bit(self) -> int:
         """Bit 2 of the phone packet's buttons while a realign request is fresh."""
@@ -155,7 +205,7 @@ class Tuner:
             hands = [None, None]
             for h, d in self.latest.items():
                 hands[h] = {"forward": d["forward"], "age": now - d["t"], "rate": d["rate"], "a": d["a"],
-                            "calibrated": self.calibrated[h]}
+                            "calibrated": self.calibrated[h], "gyro": d["gyro"]}
             scene = dict(self.scene, age=now - self.scene_t) if self.scene else None
             return {"hands": hands, "offsets": [self.offsets[0], self.offsets[1]], "scene": scene}
 
@@ -216,14 +266,20 @@ class Tuner:
                 hand = data.get("hand")
                 if self.path.startswith("/set") and hand in (0, 1):
                     with tuner.lock:
-                        for k in ("yaw", "pitch", "roll"):
+                        for k in ZERO:
                             if k in data:
                                 tuner.offsets[hand][k] = float(data[k])
+                    tuner.save()
                 elif self.path.startswith("/calibrate") and hand in (0, 1):
                     tuner.calibrate_up(hand)
                 elif self.path.startswith("/uncalibrate") and hand in (0, 1):
                     with tuner.lock:
                         tuner.base[hand], tuner.calibrated[hand] = Q.IDENTITY, False
+                    tuner.save()
+                elif self.path.startswith("/command") and data.get("cmd") in (1, 2):
+                    with tuner.lock:
+                        tuner.command_id = int(data["cmd"])
+                        tuner.command_seq = (tuner.command_seq + 1) % 256
                 elif self.path.startswith("/realign"):
                     tuner.realign_until = time.monotonic() + 0.4
                 self._send(b"{}", "application/json")

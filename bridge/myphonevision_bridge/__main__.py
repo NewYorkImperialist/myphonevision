@@ -168,12 +168,13 @@ class Hand:
 PHONE_PORT = 39601
 
 
-def phone_packet(hand: int, pos: Q.Vec, rot: Q.Quat, buttons: int = 0) -> bytes:
+def phone_packet(hand: int, pos: Q.Vec, rot: Q.Quat, buttons: int = 0, command: tuple[int, int] = (0, 0)) -> bytes:
     """Hand pose for the iPhone app's sword game: b"MPVH", hand, buttons (bit 0 A,
-    bit 1 stick click, bit 2 "realign" from the tuner page), 2 pad bytes, then
+    bit 1 stick click, bit 2 "realign" from the tuner page), command, command sequence
+    (the phone runs a command once each time the sequence changes), then
     position x y z (m) and rotation w x y z, little-endian floats, in SteamVR axes
     (+X right, +Y up, -Z forward; the head at x = z = 0 with --no-hmd)."""
-    return struct.pack("<4sBB2x7f", b"MPVH", hand, buttons & 0xFF, *pos, *rot)
+    return struct.pack("<4sBBBB7f", b"MPVH", hand, buttons & 0xFF, command[0] & 0xFF, command[1] & 0xFF, *pos, *rot)
 
 
 def main() -> None:
@@ -249,12 +250,14 @@ def main() -> None:
                                                (-0.1 if pkt.hand == 0 else 0.1, -0.1, -0.3)))
             else:
                 pos = arm.position(pkt.hand, head_pos, head_rot, rot)
+            if tuner:
+                pos = tuner.offset_pos(pkt.hand, pos)
             vmt.pose(pkt.hand, h.enable, pos, rot)
             if phone_sock:
                 try:
                     btn = (1 if pkt.buttons & P.BTN_A else 0) | (2 if pkt.buttons & P.BTN_STICK else 0)
-                    phone_sock.sendto(phone_packet(pkt.hand, pos, rot, btn | tuner.realign_bit()), phone_addr)
-                    tuner.record(pkt.hand, rot, bool(pkt.buttons & P.BTN_A))
+                    phone_sock.sendto(phone_packet(pkt.hand, pos, rot, btn | tuner.realign_bit(), tuner.command()), phone_addr)
+                    tuner.record(pkt.hand, rot, bool(pkt.buttons & P.BTN_A), pkt.gyro_calibrated)
                 except OSError:
                     pass   # phone not reachable yet; keep going
 

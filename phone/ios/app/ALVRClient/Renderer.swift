@@ -698,6 +698,7 @@ final class HandReceiver {
     private var poses: [simd_float4x4] = [matrix_identity_float4x4, matrix_identity_float4x4]
     private var stamps: [Double] = [0, 0]
     private var buttonBits: [UInt8] = [0, 0]
+    private var commandBytes: (UInt8, UInt8) = (0, 0)   // from the admin page: command, sequence
     private var started = false
     private var fd: Int32 = -1
     private var sender = sockaddr_in6()   // the bridge: where the live view goes back to
@@ -747,6 +748,7 @@ final class HandReceiver {
             lock.lock()
             poses[hand] = m
             buttonBits[hand] = buf[5]
+            commandBytes = (buf[6], buf[7])
             sender = from
             haveSender = true
             stamps[hand] = CACurrentMediaTime()
@@ -779,6 +781,12 @@ final class HandReceiver {
                 }
             }
         }
+    }
+
+    /// The admin page's latest command (1 recenter play area, 2 reset score) and its sequence number.
+    func command() -> (id: UInt8, seq: UInt8) {
+        lock.lock(); defer { lock.unlock() }
+        return commandBytes
     }
 
     /// A hand's buttons: bit 0 A, bit 1 stick click, bit 2 realign (from the bridge's tuner page).
@@ -824,6 +832,7 @@ final class SaberGame {
     var handYaw: [Float] = [0, 0]          // turns each controller so it points where you faced at the last tap
     var alignPending = [true, true]
     var aWasDown = [false, false], realignWasOn = false
+    var lastCommandSeq: UInt8? = nil   // first one seen is only remembered, not run
     var aClicks: [[Float]] = [[], []]   // recent A presses: three within 1.2 s realign that blade
     var lastTime: Double = 0
 
@@ -856,6 +865,12 @@ final class SaberGame {
         var fwd = -SIMD3<Float>(head.columns.2.x, 0, head.columns.2.z)
         fwd = simd_length(fwd) > 1e-3 ? simd_normalize(fwd) : SIMD3(0, 0, -1)
         headPos = hp; headFwd = fwd
+        let cmd = HandReceiver.shared.command()
+        if let last = lastCommandSeq, cmd.seq != last {
+            if cmd.id == 1 { anchored = false }            // recenter play area: cubes and scoreboard in front of the player
+            if cmd.id == 2 { score = 0; combo = 0 }        // reset score
+        }
+        lastCommandSeq = cmd.seq
         if !anchored {   // start (or recenter): the cubes and the scoreboard go in front of where you face
             anchorPos = hp; anchorFwd = fwd; anchored = true
             cubes.removeAll(); pieces.removeAll()
