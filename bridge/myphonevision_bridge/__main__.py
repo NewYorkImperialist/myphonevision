@@ -25,6 +25,10 @@ HOLD_TO_SYSTEM_S = 3.0  # stick hold: keep holding past the snap for a system cl
 STICK_CENTERED = 0.3    # a stick hold only counts with the stick near center (not sprinting)
 SYSTEM_TAP_S = 0.05
 
+# What the FSR squeeze drives. Index grip grabs; the trigger selects in menus and
+# fires in games. With only one analog input, "both" works in the most games.
+SQUEEZE_TARGETS = {"both": (V.GRIP, V.TRIGGER), "grip": (V.GRIP,), "trigger": (V.TRIGGER,)}
+
 
 # --- Transports ---------------------------------------------------------------
 
@@ -173,6 +177,8 @@ def main() -> None:
     ap.add_argument("--debug-follow", action="store_true",
                     help="pin both controllers 0.3 m in front of the head (checks the coordinate space)")
     ap.add_argument("--debug", action="store_true", help="print per-hand status every second")
+    ap.add_argument("--squeeze", choices=sorted(SQUEEZE_TARGETS), default="both",
+                    help="what the FSR squeeze sends: grip (grab), trigger (menus, firing) or both (default)")
     args = ap.parse_args()
 
     packets: "queue.Queue[P.ControllerPacket]" = queue.Queue()
@@ -193,6 +199,7 @@ def main() -> None:
             sys.exit(f"Couldn't reach SteamVR ({e}). Start SteamVR first, or pass --no-hmd.")
 
     vmt = V.Vmt(args.vmt_host)
+    squeeze_to = SQUEEZE_TARGETS[args.squeeze]
     arm = ArmModel()
     mount = with_pitch_trim(MOUNTS[args.mount], args.pitch_trim)
     hands = {h: Hand(h, mount) for h in (P.HAND_LEFT, P.HAND_RIGHT)}
@@ -226,16 +233,19 @@ def main() -> None:
                     vmt.button(pkt.hand, idx, bool(b & bit))
             if changed & P.BTN_STICK:
                 vmt.joystick_click(pkt.hand, V.JOYSTICK, bool(b & P.BTN_STICK))
-            # The FSR is the grip (grab), not the trigger; a grip switch, if wired, also counts.
-            grip = max(pkt.trigger, 1.0 if b & P.BTN_GRIP else 0.0)
-            vmt.trigger(pkt.hand, V.GRIP, grip)
+            # The FSR squeeze drives the grip, the trigger or both (--squeeze); a grip
+            # switch, if wired, also counts.
+            squeeze = max(pkt.trigger, 1.0 if b & P.BTN_GRIP else 0.0)
+            for t in squeeze_to:
+                vmt.trigger(pkt.hand, t, squeeze)
             vmt.joystick(pkt.hand, V.JOYSTICK, pkt.stick[0], pkt.stick[1])
             # Edge-triggered touch/click states derived from the analog values.
-            states = (grip > 0.05, grip > 0.9,
+            states = (squeeze > 0.05, squeeze > 0.9,
                       bool(b & P.BTN_STICK) or abs(pkt.stick[0]) + abs(pkt.stick[1]) > 0)
             if states != h.prev_states:
-                vmt.trigger_touch(pkt.hand, V.GRIP, states[0])
-                vmt.trigger_click(pkt.hand, V.GRIP, states[1])
+                for t in squeeze_to:
+                    vmt.trigger_touch(pkt.hand, t, states[0])
+                    vmt.trigger_click(pkt.hand, t, states[1])
                 vmt.joystick_touch(pkt.hand, V.JOYSTICK, states[2])
                 h.prev_states = states
 
@@ -282,7 +292,7 @@ def main() -> None:
                 p = h.last
                 print(f"{name}: {h.count:3d} Hz  q=({p.quat[0]:+.2f},{p.quat[1]:+.2f},"
                       f"{p.quat[2]:+.2f},{p.quat[3]:+.2f})  stick=({p.stick[0]:+.2f},{p.stick[1]:+.2f})"
-                      f"  grip={p.trigger:.2f}  buttons={p.buttons:05b}"
+                      f"  squeeze={p.trigger:.2f}  buttons={p.buttons:05b}"
                       f"{'' if p.gyro_calibrated else '  GYRO UNCALIBRATED'}")
                 h.count = 0
 

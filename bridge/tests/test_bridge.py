@@ -104,3 +104,11 @@ def test_stick_hold_ignores_clicks_while_pushing():
     h = StickHold()
     assert not any(h.update(True, (0.0, 0.9), i * 0.1) for i in range(30))  # sprint-click
     assert not any(h.update(True, (0.0, 0.0), 3.0 + i * 0.1) for i in range(9))  # timer restarted
+
+
+def test_squeeze_targets():
+    from myphonevision_bridge.__main__ import SQUEEZE_TARGETS
+    from myphonevision_bridge import vmt as V
+    assert set(SQUEEZE_TARGETS["both"]) == {V.GRIP, V.TRIGGER}
+    assert SQUEEZE_TARGETS["grip"] == (V.GRIP,)
+    assert SQUEEZE_TARGETS["trigger"] == (V.TRIGGER,)
