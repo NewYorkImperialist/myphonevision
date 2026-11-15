@@ -86,7 +86,7 @@ if v2:
     for name, items in sheets.items():
         sheet(name, items, PW, PH, L)
     sheet("little-tabs", [("FH", 0, L, L)], PW, PH, L)   # FH x4 alone, for re-cutting lost ones
-    sheet("F-and-little-tabs", [("F", 90, L, L), ("FH", 0, L + size["F"][1] + 5, L)], PW, PH, L)
+    sheet("F-and-little-tabs", [("F", 90, L, L), ("FH", 0, L + size["F"][1] + 5, L)], 36 * 25.4, 24 * 25.4, L)   # the laser's 36 x 24 in bed
     # The same parts on one sheet, exactly 19 x 14 in so the Epilog's Piece Size can be typed in whole inches.
     M = 5.0
     row2 = M + max(size["R1"][1], size["R2"][1]) + M
