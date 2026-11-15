@@ -1,5 +1,7 @@
 # SlimeVR body trackers
 
+> **Cut (2026-11-14): not part of the build.** Body tracking was dropped to focus on the headset and the two controllers, and these trackers were never flashed. The steps below also assume a Windows hotspot; the laptop runs Linux. See [README.md](../../README.md) for what was built.
+
 Use stock SlimeVR: its firmware, server and SteamVR driver. VRChat already supports it. The only work here is wiring, configuration, cases and straps. The full-body skeleton hangs off the HMD's position, so this needs ARCore head position (fork change 2). With a 3DoF head the body stays pinned in place.
 
 ## Boards

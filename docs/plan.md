@@ -1,3 +1,5 @@
+> **This is the original plan from 2026-11-13, and the build changed:** an iPhone 16 Pro instead of the Pixel 7 (now the fallback), a Fedora Linux laptop with VMT built for Linux, a laser-cut cardboard headset, no body tracking, and controllers with only a stick, an A button and an FSR grip (no rumble). See [README.md](../README.md) for the current build.
+
 # Plan
 
 Proposal dated 2026-11-13. Build details live in each folder's README; this page holds the decisions, parts, people and risks.

@@ -1,5 +1,7 @@
 # Webcam body tracking (fallback for SlimeVR)
 
+> **Cut (2026-11-14): not part of the build.** Body tracking was dropped. This page also needs a Windows download and a Windows-only driver, and the laptop runs Fedora Linux. See [README.md](../README.md) for what was built.
+
 Use this if there aren't enough ESP32 boards and gyro IMUs for SlimeVR (we have 3 MPU-6050s and 3 boards, all needed for the controllers and hub). [MediaPipe-VR-Fullbody-Tracking](https://github.com/ju1ce/Mediapipe-VR-Fullbody-Tracking) watches you through the Logitech webcam and turns your pose into hip and foot trackers. Nothing is worn. It's less accurate than IMU trackers: you have to stay in the camera's view, and depth is weak.
 
 **It hangs the skeleton off the headset's position, like SlimeVR.** With a 3DoF head (no position tracking), the body stays pinned in place. Get the headset's position working first: ARKit on the iPhone 16 Pro (the current plan, issue #3), or ARCore in the PhoneVR app on the Pixel 7 fallback.

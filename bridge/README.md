@@ -4,8 +4,9 @@ Reads controller packets from the ESP-NOW hub (USB serial, 921600 baud) or strai
 
 ```sh
 pip install -e .              # on Windows and Linux this also installs openvr
-python -m myphonevision_bridge --debug               # auto-detects the hub's COM port
-python -m myphonevision_bridge --serial COM5
+python -m myphonevision_bridge --debug               # auto-detects the hub's serial port
+python -m myphonevision_bridge --serial /dev/ttyUSB0 # Linux (the laptop we demo on)
+python -m myphonevision_bridge --serial COM5         # Windows
 python -m myphonevision_bridge --udp 39600           # controllers built with *_udp
 python -m myphonevision_bridge --no-hmd --debug      # bench test without SteamVR
 ```
@@ -18,15 +19,15 @@ Start SteamVR first: the bridge reads the headset pose through OpenVR.
 python -m myphonevision_bridge.preflight
 ```
 
-Run it before starting the bridge. It checks for the hub on USB, the VMT driver (VMT sends `/VMT/Out/Alive` every few seconds on its own, per its source), the SlimeVR server, and, through SteamVR, the headset, both VMT controllers and the SlimeVR trackers. Each line says OK, WARN or FAIL with the fix, and the exit code is non-zero if anything failed.
+Run it before starting the bridge. It checks for the hub on USB, the VMT driver (VMT sends `/VMT/Out/Alive` every few seconds on its own, per its source), the SlimeVR server, and, through SteamVR, the headset, both VMT controllers and the SlimeVR trackers. SlimeVR body tracking was cut from the build, so its two checks just warn. Each line says OK, WARN or FAIL with the fix, and the exit code is non-zero if anything failed.
 
 ## What it does
 
 - **Pose:** `/VMT/Raw/Driver`, with enable 5 (left) / 6 (right) from the first packet, because VMT latches the device type on first sight. VMT still rejects every pose until a room matrix has been set once (VMT Manager on Windows; `tools/linux/vmt.sh` sets one on Linux), though raw poses don't use it.
-- **Position (rung 1, arm model):** a shoulder fixed under the head, an elbow that follows the controller 40%, and a forearm along the controller. Good for pointing, menus and VRChat; Beat Saber will feel wrong.
+- **Position (rung 1, arm model):** a shoulder fixed under the head, an elbow that follows the controller 40%, and a forearm along the controller. The elbow follows where the controller points, not its twist, so turning a hand in place no longer flips its position to the other side. Good for pointing, menus and VRChat; Beat Saber will feel wrong.
 - **Orientation:** IMU quaternion, then the `--mount` preset, then a yaw offset. **Click and hold the thumbstick for 1 s** (stick centered) to snap the controller's heading to the head's; it buzzes when done (on a controller with a motor; the as-built ones have none, so watch for the bridge's printout). Keep holding to 3 s for a system click (SteamVR menu; a longer buzz). The controllers have no system button; a board that has one still works the same way (hold 1 s to snap, tap for a system click). A stick click while pushing the stick (sprint) never snaps. It works pointing at the floor or ceiling too, but holding it level is most accurate. If hands look tilted up or down in games, add `--pitch-trim DEG` (positive raises the nose); VMT hands games the Index profile's grip pose, which can sit at an angle to the raw one. The MPU-6050 drifts, so expect to snap every 1–5 minutes.
-- **Inputs:** the FSR squeeze drives **both the grip and the trigger** by default (value, touch, click above 0.9; a grip switch also counts), so it grabs, clicks in the SteamVR menu and fires in games. `--squeeze grip` or `--squeeze trigger` picks one, for a game where grabbing also fires. Then A, B, system, and thumbstick (axes, click, touch), using VMT's Index mapping.
-- **Haptics:** listens for `/VMT/Out/Haptic` on port 39571 and forwards it to the right controller. VMT Manager also uses 39571, so close it while playing.
+- **Inputs:** the FSR squeeze drives **both the grip and the trigger** by default (value, touch, click above 0.9; a grip switch also counts), so it grabs, clicks in the SteamVR menu and fires in games. `--squeeze grip` or `--squeeze trigger` picks one, for a game where grabbing also fires. Then A and the thumbstick (axes, click, touch), using VMT's Index mapping. The system click comes from a 3 s stick hold. B and a system button still work on a board that has them; the as-built controllers don't.
+- **Haptics:** listens for `/VMT/Out/Haptic` on port 39571 and forwards it to the right controller. VMT Manager also uses 39571, so close it while playing. The as-built controllers have no vibration motor, so nothing buzzes; the code path stays for a board that has one.
 
 VMT's message formats and Index input indices were checked against its driver source, `vmt_driver/CommunicationManager.cpp` and `TrackedDeviceServerDriver.cpp`.
 

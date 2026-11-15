@@ -1,5 +1,7 @@
 # AR workspace: research (stretch goal)
 
+> **Update (2026-11-15):** the AR passthrough half is now built into the iPhone app (rear camera behind the stream, LiDAR depth, people and hand occlusion; see the lobby's AR passthrough settings), on ALVR v21.0.0-dev14, not v20.8.0. The Desktop+ half isn't: Desktop+ is a Windows app and the laptop runs Linux. The notes below are from before that.
+
 Research notes from 2026-11-14. Nothing here is built. It's a stretch goal for after the hour-20 gate: it needs the iPhone app's video, 6DoF head pose and reprojection working first.
 
 **The idea:** an "AR mode" in the iPhone app that shows the phone's rear camera behind the SteamVR stream. With [Desktop+](https://github.com/elvissteinjr/DesktopPlus) running on the laptop, your PC's windows float in your real room: an AR workspace, like Immersed or Apple's Mac Virtual Display, built from a phone. It keeps the project's main principle: no game-specific code, everything still goes through SteamVR.

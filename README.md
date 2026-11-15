@@ -1,63 +1,61 @@
 # myphonevision
 
-> **Start here:** [CLAUDE.md](CLAUDE.md) has the current plan, what each teammate does next, and the state of every part. Claude Code reads it automatically when you open this repo.
-
-A SteamVR-native phone headset built for HackUMass. A Pixel 7 is the display and the inside-out 6DoF head tracker, tethered over USB to a Windows GPU laptop running ALVR. Two 3D-printed ESP32 controllers show up in SteamVR as Valve Index controllers through Virtual Motion Tracker (VMT), and a SlimeVR set adds lower-body tracking. Every device registers as a standard SteamVR device, so VRChat, Beat Saber and SteamVR Home run unmodified.
+A SteamVR headset built from a phone, a cardboard box and two magnifiers, made at HackUMass XIV. An iPhone 16 Pro running our own ALVR client is the display and the head tracker, on a USB cable to a Fedora Linux laptop running SteamVR. Two ESP32 controllers show up in SteamVR as Valve Index controllers through Virtual Motion Tracker (VMT). Every device registers as a standard SteamVR device, so SteamVR Home and SteamVR games run unmodified (games through Proton on Linux).
 
 ```
- Pixel 7 (PhoneVR fork) ──USB──▶ ALVR ─┐
-                                       │
- Controllers ──ESP-NOW──▶ hub ──USB──▶ bridge ──OSC──▶ VMT ─┼──▶ SteamVR ──▶ games
-                                       │
- SlimeVR trackers ──PC hotspot──▶ SlimeVR server ─┘
+ iPhone 16 Pro (our client) ◀──USB──▶ ALVR ───────────────────┐
+                                                              ├──▶ SteamVR ──▶ games
+ Controllers ──ESP-NOW──▶ hub ──USB──▶ bridge ──OSC──▶ VMT ───┘
 ```
 
-The phone is the only part on a cable. Controllers use ESP-NOW and trackers use a private hotspot, so venue Wi-Fi never touches the tracking path.
+Nothing goes over venue Wi-Fi: the phone streams over USB, and the controllers talk to the hub by ESP-NOW. There is no body tracking; the planned SlimeVR trackers were cut.
 
-## Before anything else: the two gates (by hour 3)
+## Phone
 
-1. **A Windows laptop with a hardware video encoder**: NVIDIA GTX 1000+ (NVENC), AMD (AMF) or Intel (VPL). No such laptop means re-planning as a standalone Android app, which loses SteamVR.
-2. **A matched pair of lenses**: 40–50 mm focal length, 25–35 mm diameter. The headset CAD can't be finalized without them. See [headset/README.md](headset/README.md).
+A friend's iPhone 16 Pro runs our own client ([phone/ios/](phone/ios/)), built from [kotleni/iPhoneVR](https://github.com/kotleni/iPhoneVR) on ALVR v21.0.0-dev14. It tracks the head with ARKit, filled in by the gyro, and shows the stream through a lens distortion pass at 120 Hz, reprojecting each frame to the latest head pose. It also has an optional AR passthrough mode. A Pixel 7 running PhoneVR is the fallback ([phone/README.md](phone/README.md)).
 
-The full plan, parts list and risks are in [docs/plan.md](docs/plan.md). Step-by-step wiring for the controllers, hub and trackers is in [docs/wiring.md](docs/wiring.md).
+## Headset
+
+Laser-cut corrugated cardboard ([headset/cardboard/](headset/cardboard/), picture guide [build-guide.pdf](headset/cardboard/build-guide.pdf), v2 in [headset/cardboard/v2/](headset/cardboard/v2/)). It holds two Carson TriView TV-36 magnifiers at 5.5x: on each, the top and bottom lenses are swung out and the middle one is left in. The 3D-printed headset in [headset/](headset/) is parked.
+
+## Laptop
+
+Fedora Linux on an Intel Arc 140V, running SteamVR and ALVR v21.0.0-dev14. It streams to the iPhone over USB, through the iPhone's Personal Hotspot, at 60 fps with about 36 ms total latency. The Linux setup and its fixes are in [phone/README.md](phone/README.md#linux-laptop-fedora-intel-arc-igpu). Two of the fixes are scripts: [tools/linux/alvr-pose-patch.sh](tools/linux/alvr-pose-patch.sh) patches ALVR's server so the stream stops freezing every few seconds, and [tools/linux/vmt.sh](tools/linux/vmt.sh) builds VMT, which only ships for Windows, as a Linux SteamVR driver.
+
+## Controllers
+
+Two ESP32 controllers, each with an IMU, an analog thumbstick, an A button and an FSR grip, on 4×AA. LEFT has a GY-521 (MPU-6050) and RIGHT an Adafruit BNO055. They send to a hub ESP32 by ESP-NOW, LEFT at about 195 Hz and RIGHT at about 150 Hz. The hub passes the packets over USB serial to a Python bridge ([bridge/](bridge/)), which places each hand with an arm model and sends it to VMT, so SteamVR sees two Valve Index controllers.
+
+To reset drift, click and hold the thumbstick (centered) for 1 s. Hold it for 3 s for a system click (the SteamVR menu).
+
+Firmware is in [firmware/controller/](firmware/controller/) and [firmware/hub/](firmware/hub/) (PlatformIO), wiring in [docs/wiring.md](docs/wiring.md), and the shell (concept D, a pistol grip) in [cases/mockups/controller/d_ergo.scad](cases/mockups/controller/d_ergo.scad).
+
+## Test game
+
+[game/saber_playground.py](game/saber_playground.py) is our own SteamVR app: a blade in each hand for slicing floating cubes. It runs on the laptop like any SteamVR game, so ALVR streams it to the iPhone app, and each blade follows one of the two controllers. `game/play.sh` starts the bridge and the game in one command. `--desktop` runs it in a window without a headset.
+
+## How to run it
+
+On the Fedora laptop:
+
+1. **Headset:** set up SteamVR and ALVR v21.0.0-dev14 with the fixes in [phone/README.md](phone/README.md#linux-laptop-fedora-intel-arc-igpu), install the iPhone app ([phone/ios/README.md](phone/ios/README.md)), plug the phone in with Personal Hotspot on, then start SteamVR from the ALVR dashboard.
+2. **Controllers:** run `tools/linux/vmt.sh` once and restart SteamVR. Plug in the hub, turn on both controllers, and in `bridge/` run `pip install -e . && python -m myphonevision_bridge --debug`.
+3. **Play:** start SteamVR Home or a game from Steam. For our sword game, run `pip install -r game/requirements.txt` once, then `game/play.sh` from the repo root: it starts the bridge if step 2's isn't running, then the game, and the phone shows it ([game/README.md](game/README.md)).
 
 ## Layout
 
-| Path | What | Workstream |
-| --- | --- | --- |
-| [headset/](headset/) | Parametric OpenSCAD shell, lens focus jig | Optics and industrial design |
-| [cases/](cases/) | Tracker cases and controller shells (OpenSCAD) | Optics and industrial design |
-| [phone/](phone/) | PhoneVR setup script and fork notes | Phone and streaming |
-| [firmware/controller/](firmware/controller/) | ESP32 controller firmware: DevKitC or Xiao ESP32S3 (PlatformIO) | Controllers |
-| [firmware/hub/](firmware/hub/) | ESP-NOW to USB-serial hub, DevKitC (PlatformIO) | Controllers |
-| [firmware/shared/packet.h](firmware/shared/packet.h) | Radio packet format | Controllers |
-| [bridge/](bridge/) | Python bridge: hub serial to VMT OSC, arm model, yaw snap | Controllers |
-| [firmware/slimevr/](firmware/slimevr/) | SlimeVR tracker wiring and config | Body tracking |
-| [tools/windows/](tools/windows/) | adb forwarding and firewall scripts | Phone and streaming |
-| [tools/export-stl.sh](tools/export-stl.sh) | Export every printable part to `build/stl/` | Optics and industrial design |
-| [tools/cardboard_qr.py](tools/cardboard_qr.py) | Headset lens settings as a Cardboard QR code for the phone | Phone and streaming |
-
-## Quick start
-
-```sh
-# Controllers (any OS with PlatformIO)
-cd firmware/hub && pio run -t upload
-cd firmware/controller && pio run -e devkit_left -t upload    # then devkit_right
-
-# Bridge (on the Windows laptop, with SteamVR and VMT running)
-cd bridge && pip install -e . && python -m myphonevision_bridge --debug
-
-# Phone
-./phone/setup.sh
-```
-
-## Status
-
-| Part | State |
+| Path | What |
 | --- | --- |
-| Controller and hub firmware | Compiles for DevKitC and Xiao (espressif32 6.12.0), with a serial bench test; not yet run on hardware |
-| Bridge | Unit tests and a UDP-to-OSC smoke test pass; pre-demo check (`preflight`) added; not yet run against SteamVR |
-| Headset CAD | Renders and exports cleanly; supports stacked lenses, top strap; not printed; needs lens measurements |
-| Tracker and controller cases | Render and export cleanly; not printed; sizes from datasheets until parts are measured |
-| PhoneVR | No build needed: the PR #458 author publishes an APK (v1.0.1, with reprojection and a Mali GPU fix). Lens settings come from a generated QR code (`tools/cardboard_qr.py`) |
-| SlimeVR | `firmware/slimevr/build.sh` builds stock SlimeVR v0.7.4 for DevKitC + 2× MPU-6050; not yet flashed |
+| [phone/ios/](phone/ios/) | iPhone client (ALVR v21, from kotleni/iPhoneVR) |
+| [phone/](phone/) | Linux laptop setup and fixes, and the Pixel 7 fallback |
+| [tools/linux/](tools/linux/) | VMT as a Linux SteamVR driver (`vmt.sh`) and the ALVR server pose patch (`alvr-pose-patch.sh`) |
+| [headset/cardboard/](headset/cardboard/) | Cardboard headset: cut files, picture guide, v2 in `v2/` |
+| [headset/](headset/) | 3D-printed headset in OpenSCAD (parked) |
+| [cases/](cases/) | Controller shells in OpenSCAD; the one in use is [cases/mockups/controller/d_ergo.scad](cases/mockups/controller/d_ergo.scad) |
+| [firmware/controller/](firmware/controller/) | ESP32 controller firmware; detects an MPU-6050 or BNO055 (PlatformIO) |
+| [firmware/hub/](firmware/hub/) | ESP-NOW to USB-serial hub (PlatformIO) |
+| [firmware/shared/packet.h](firmware/shared/packet.h) | Radio packet format, mirrored in [bridge/myphonevision_bridge/protocol.py](bridge/myphonevision_bridge/protocol.py) |
+| [bridge/](bridge/) | Python bridge: hub serial to VMT OSC, arm model, drift reset |
+| [game/](game/) | Saber playground, our SteamVR test game |
+| [docs/wiring.md](docs/wiring.md) | Controller and hub wiring, and what goes in each shell |
+| [firmware/slimevr/](firmware/slimevr/), [tools/windows/](tools/windows/), [tools/cardboard_qr.py](tools/cardboard_qr.py), [tools/export-stl.sh](tools/export-stl.sh) | Not in the current build: SlimeVR trackers (cut), Windows and Pixel 7 tools, STL export for the printed parts |

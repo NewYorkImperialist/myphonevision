@@ -1,3 +1,5 @@
+> **These are the original goals from 2026-11-13, and the build changed:** an iPhone 16 Pro instead of the Pixel 7 (now the fallback), a Fedora Linux laptop with VMT built for Linux, a laser-cut cardboard headset, no body tracking, and controllers with only a stick, an A button and an FSR grip (no rumble). See [README.md](../README.md) for the current build.
+
 # Goals
 
 The end goal: **a phone-and-printed-parts VR kit that works with the whole desktop VR ecosystem.** Any PC VR game runs unmodified, because every device shows up in SteamVR as a standard device. We write drivers and bridges, never game-specific code. From the proposal of 2026-11-13, updated for the iPhone 16 Pro headset (issue #3). The decisions, parts and risks are in [plan.md](plan.md).
