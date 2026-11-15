@@ -11,15 +11,24 @@
 <path fill="none" stroke="#ff0000" stroke-width="0.01" d="M103.000,41.250 L103.000,37.750 L72.500,37.750 L72.500,41.250 L103.000,41.250 Z"/>
 <path fill="none" stroke="#ff0000" stroke-width="0.01" d="M39.750,133.050 L43.250,133.050 L43.250,116.550 L39.750,116.550 L39.750,133.050 Z"/>
 <path fill="none" stroke="#ff0000" stroke-width="0.01" d="M21.000,108.800 L21.000,140.800 L25.000,140.800 L25.000,108.800 L21.000,108.800 Z"/>
-<path fill="none" stroke="#0000ff" stroke-width="0.5" d="M40.000,190.350 L40.000,179.300"/>
-<path fill="none" stroke="#0000ff" stroke-width="0.5" d="M135.500,174.350 L135.500,146.800"/>
-<path fill="none" stroke="#0000ff" stroke-width="0.5" d="M128.500,211.600 L114.250,211.600"/>
-<path fill="none" stroke="#0000ff" stroke-width="0.5" d="M61.250,211.600 L47.000,211.600"/>
-<path fill="none" stroke="#0000ff" stroke-width="0.5" d="M40.000,70.300 L40.000,59.250"/>
-<path fill="none" stroke="#0000ff" stroke-width="0.5" d="M135.500,102.800 L135.500,75.250"/>
-<path fill="none" stroke="#0000ff" stroke-width="0.5" d="M128.500,38.000 L114.250,38.000"/>
-<path fill="none" stroke="#0000ff" stroke-width="0.5" d="M61.250,38.000 L47.000,38.000"/>
-<text x="41.50" y="89.80" font-size="6" text-anchor="middle" fill="#000000" font-family="Arial, DejaVu Sans, sans-serif">R1</text>
-<text x="41.50" y="94.30" font-size="2.6" text-anchor="middle" fill="#000000" font-family="Arial, DejaVu Sans, sans-serif">back</text>
-<text x="41.50" y="159.80" font-size="2.6" text-anchor="middle" fill="#000000" font-family="Arial, DejaVu Sans, sans-serif">TOP</text>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M40.000,190.350 L40.000,184.350"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M40.000,182.850 L40.000,179.300"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M135.500,174.350 L135.500,168.350"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M135.500,166.850 L135.500,160.850"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M135.500,159.350 L135.500,153.350"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M135.500,151.850 L135.500,146.800"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M128.500,211.600 L122.500,211.600"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M121.000,211.600 L115.000,211.600"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M61.250,211.600 L55.250,211.600"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M53.750,211.600 L47.750,211.600"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M40.000,70.300 L40.000,64.300"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M40.000,62.800 L40.000,59.250"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M135.500,102.800 L135.500,96.800"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M135.500,95.300 L135.500,89.300"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M135.500,87.800 L135.500,81.800"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M135.500,80.300 L135.500,75.250"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M128.500,38.000 L122.500,38.000"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M121.000,38.000 L115.000,38.000"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M61.250,38.000 L55.250,38.000"/>
+<path fill="none" stroke="#0000ff" stroke-width="0.01" d="M53.750,38.000 L47.750,38.000"/>
 </svg>
