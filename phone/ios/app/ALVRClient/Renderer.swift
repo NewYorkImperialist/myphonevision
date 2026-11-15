@@ -944,6 +944,8 @@ final class SaberGame {
     var headPos = SIMD3<Float>(0, 1.6, 0), headFwd = SIMD3<Float>(0, 0, -1)
     var handYaw: [Float] = [0, 0]          // turns each controller so it points where you faced at the last tap
     var alignPending = [true, true]
+    var handLift: [Float] = [0, 0]          // height correction per hand, set when the blades realign
+    var measureLift = [true, true]
     var aWasDown = [false, false], realignWasOn = false
     var lastCommandSeq: UInt8? = nil   // first one seen is only remembered, not run
     var sceneId = 0                    // 0 neon grid, 1 forest, 2 space, 3 Moon, 4 volcano (admin page)
@@ -1036,6 +1038,7 @@ final class SaberGame {
                 if simd_length(f0) > 0.3 {
                     handYaw[h] = atan2(f0.x, -f0.z) - atan2(fwd.x, -fwd.z)   // controller's heading -> where the head faces
                     alignPending[h] = false
+                    measureLift[h] = true
                     if blades[h].valid {
                         flashes.append((blades[h].a, SaberGame.colors[h], 0))
                         if flashes.count > 4 { flashes.removeFirst() }
@@ -1045,6 +1048,11 @@ final class SaberGame {
             m = simd_float4x4(simd_quatf(angle: handYaw[h], axis: SIMD3<Float>(0, 1, 0))) * m   // about the head (x = z = 0)
             m.columns.3.x += hp.x   // the bridge places hands for a head at x = z = 0
             m.columns.3.z += hp.z
+            if measureLift[h] {      // on realign: this hand goes to chest height, 42 cm below the eyes, both hands level
+                handLift[h] = (hp.y - 0.42) - m.columns.3.y
+                measureLift[h] = false
+            }
+            m.columns.3.y += handLift[h]
             var b = blades[h]
             let d = simd_normalize(-SIMD3<Float>(m.columns.2.x, m.columns.2.y, m.columns.2.z))
             let origin = SIMD3<Float>(m.columns.3.x, m.columns.3.y, m.columns.3.z)
