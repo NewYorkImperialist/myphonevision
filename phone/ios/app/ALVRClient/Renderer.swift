@@ -173,7 +173,8 @@ final class Renderer {
     /// Camera uniforms and Y/CbCr textures for the latest ARKit image, bound at
     /// fragment buffer 2 and textures 2-3. With passthrough off (or no image yet)
     /// the shader ignores them. The CVMetalTextures are kept until the GPU is done.
-    func bindCamera(encoder: MTLRenderCommandEncoder, commandBuffer: MTLCommandBuffer, displayHead: simd_float4x4) {
+    func bindCamera(encoder: MTLRenderCommandEncoder, commandBuffer: MTLCommandBuffer, displayHead: simd_float4x4,
+                    allowPassthrough: Bool = true) {
         let s = VRSettings.current
         var c = VRCameraUniforms()
         c.key = SIMD4<Float>(s.keyMode, s.keyTolerance, 0.05, 0)
@@ -183,7 +184,7 @@ final class Renderer {
         var depthFull: MTLTexture = placeholderTexture
         var personMatte: MTLTexture = placeholderTexture
         var personDepthTex: MTLTexture = placeholderTexture
-        if s.passthrough > 0.5, let cam = EventHandler.shared.latestCameraFrame(),
+        if allowPassthrough, s.passthrough > 0.5, let cam = EventHandler.shared.latestCameraFrame(),
            let y = makePlaneTexture(cam.image, plane: 0, format: .r8Unorm),
            let cbcr = makePlaneTexture(cam.image, plane: 1, format: .rg8Unorm) {
             // cameraToHead maps head coordinates into camera coordinates (see WorldTracker).
@@ -308,6 +309,7 @@ final class Renderer {
         let renderedHead = poseHistory.last(where: { $0.time <= renderTime })?.head ?? poseHistory[0].head
 
         var displayUniforms = Renderer.makeVRUniforms(drawable: drawable, head: displayHead)
+        if saberMode { displayUniforms.misc.y = 0 }   // the sword game is fully virtual: no camera behind it
         var renderUniforms = displayUniforms
         renderUniforms.headToWorld = renderedHead
         var frameUniforms = Renderer.makeFrameUniforms(renderedHead: renderedHead, displayHead: displayHead,
@@ -342,7 +344,7 @@ final class Renderer {
             encoder.setFragmentBytes(&frameUniforms, length: MemoryLayout<VRFrameUniforms>.stride, index: 1)
             encoder.setFragmentTexture(testEyesTexture, index: 0)
             encoder.setFragmentTexture(testDistanceTexture, index: 1)
-            bindCamera(encoder: encoder, commandBuffer: commandBuffer, displayHead: displayHead)
+            bindCamera(encoder: encoder, commandBuffer: commandBuffer, displayHead: displayHead, allowPassthrough: !saberMode)
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
             encoder.endEncoding()
         }
