@@ -1,4 +1,5 @@
-"""Laser files from gen.py's pages: red = cut through, blue = score (folds), black = mark (labels, guides).
+"""Laser files from gen.py's pages. Stroke width picks the job: 0.01 mm = cut (red); anything wider = engrave
+(blue folds at low power score the top liner; black labels and guides).
 
     python3 laser.py [--v2]      # writes laser/ (or v2/laser/): one .svg, .dxf and .pdf per page
 """
@@ -10,11 +11,13 @@ sys.argv = ["gen.py"] + (["--v2"] if v2 else [])
 g = runpy.run_path(os.path.join(here, "gen.py"))
 pages, PW, PH = g["pages"], g["PW"], g["PH"]
 COLOR = {"cut": "#ff0000", "mountain": "#0000ff", "valley": "#0000ff", "guide": "#000000"}
+WIDTH = {"cut": 0.01, "mountain": 0.5, "valley": 0.5, "guide": 0.25}   # mm; the laser driver cuts hairlines, engraves the rest
 LAYER = {"cut": ("CUT", 1), "mountain": ("SCORE", 5), "valley": ("SCORE", 5), "guide": ("MARK", 7)}
 os.makedirs(out, exist_ok=True)
 counts = {}
 for n, pg in enumerate(pages, 1):
-    svg = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{PW}mm" height="{PH}mm" viewBox="0 0 {PW} {PH}">']
+    svg = ['<?xml version="1.0" encoding="UTF-8"?>',
+           f'<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="{PW}mm" height="{PH}mm" viewBox="0 0 {PW} {PH}">']
     dxf = ["0", "SECTION", "2", "HEADER", "9", "$INSUNITS", "70", "4", "0", "ENDSEC",
            "0", "SECTION", "2", "TABLES", "0", "TABLE", "2", "LAYER", "70", "3"]
     for name, col in (("CUT", 1), ("SCORE", 5), ("MARK", 7)):
@@ -25,7 +28,7 @@ for n, pg in enumerate(pages, 1):
         pts = list(geom.coords)
         closed = geom.is_ring
         d = "M" + " L".join(f"{x:.3f},{PH - y:.3f}" for x, y in pts) + (" Z" if closed else "")
-        svg.append(f'<path fill="none" stroke="{COLOR[kind]}" stroke-width="0.1" d="{d}"/>')
+        svg.append(f'<path fill="none" stroke="{COLOR[kind]}" stroke-width="{WIDTH[kind]}" d="{d}"/>')
         layer, _ = LAYER[kind]
         if closed and pts[0] == pts[-1]: pts = pts[:-1]
         dxf += ["0", "POLYLINE", "8", layer, "66", "1", "70", "1" if closed else "0"]
