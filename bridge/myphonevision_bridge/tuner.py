@@ -34,7 +34,7 @@ h1{font-size:18px;margin:0 0 10px}.row{display:flex;gap:16px;flex-wrap:wrap;alig
 canvas.small{background:#0b0d16;border-radius:6px}label{display:flex;align-items:center;gap:8px;margin:6px 0}
 label span{width:44px}input[type=range]{flex:1}b{display:inline-block;width:48px;text-align:right}
 button{background:#2b3a66;color:#fff;border:0;border-radius:6px;padding:7px 10px;margin:4px 4px 0 0;cursor:pointer}
-button.big{background:#3a7bd5;font-size:16px;padding:10px 16px}button.cal{background:#1f8a5b;font-size:15px}
+button.big{background:#3a7bd5;font-size:16px;padding:10px 16px}button.scn{background:#5a3a8a}button.cal{background:#1f8a5b;font-size:15px}
 .stat{color:#9ab;font-size:13px;margin-top:6px}.steps{color:#bcd;margin:6px 0 12px}
 </style></head><body>
 <h1>Sword game admin</h1>
@@ -45,6 +45,13 @@ button.big{background:#3a7bd5;font-size:16px;padding:10px 16px}button.cal{backgr
 <button class="big" onclick="post('/realign',{})">Realign blades (pointing forward)</button>
 <button onclick="post('/command',{cmd:1})">Recenter play area</button>
 <button onclick="post('/command',{cmd:2})">Reset score</button>
+</div>
+<div class="steps"><b style="width:auto">Scene:</b>
+<button class="scn" onclick="post('/command',{cmd:10})">Neon grid</button><button class="scn" onclick="post('/command',{cmd:11})">Forest</button>
+<button class="scn" onclick="post('/command',{cmd:12})">Space</button><button class="scn" onclick="post('/command',{cmd:13})">Moon</button>
+<button class="scn" onclick="post('/command',{cmd:14})">Volcano</button><button class="scn" onclick="post('/command',{cmd:15})">Study</button>
+&nbsp; <b style="width:auto">Mode:</b>
+<button class="scn" onclick="post('/command',{cmd:20})">Sword game</button><button class="scn" onclick="post('/command',{cmd:21})">Explore (no cubes)</button>
 </div>
 <div class="row"><canvas id="view" width="1280" height="720"></canvas><div id="hands"></div></div>
 <script>
@@ -79,7 +86,8 @@ const P=p=>{const d=sub(p,eye),z=dot(d,f);return z<0.05?null:[W/2+dot(d,r)/z*F,H
 const seg=(a,b)=>{let pa=sub(a,eye),pb=sub(b,eye),za=dot(pa,f),zb=dot(pb,f);if(za<0.05&&zb<0.05)return null;
  if(za<0.05){const t=(0.05-za)/(zb-za);a=[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]}
  if(zb<0.05){const t=(0.05-zb)/(za-zb);b=[b[0]+(a[0]-b[0])*t,b[1]+(a[1]-b[1])*t,b[2]+(a[2]-b[2])*t]}return[P(a),P(b)]};
-const sky=G.createLinearGradient(0,0,0,Hh);sky.addColorStop(0,"#04040a");sky.addColorStop(0.5,"#1a1030");sky.addColorStop(1,"#05060c");G.fillStyle=sky;G.fillRect(0,0,W,Hh);
+const SKY=[["#04040a","#1a1030","#05060c"],["#6f9fd0","#9cb98a","#2f4a22"],["#000","#05050c","#000"],["#000","#111","#6a6a66"],["#120404","#5a1606","#1a0805"],["#d8cdb8","#c8b89a","#6a4528"]][s.scene_id]||["#04040a","#1a1030","#05060c"];
+const sky=G.createLinearGradient(0,0,0,Hh);sky.addColorStop(0,SKY[0]);sky.addColorStop(0.5,SKY[1]);sky.addColorStop(1,SKY[2]);G.fillStyle=sky;G.fillRect(0,0,W,Hh);
 G.lineWidth=1;G.strokeStyle="rgba(60,100,200,0.35)";G.beginPath();const gx=Math.round(eye[0]),gz=Math.round(eye[2]);
 for(let i=-8;i<=8;i++){for(const [a,b] of [[[gx+i*0.5,0,gz-4],[gx+i*0.5,0,gz+4]],[[gx-4,0,gz+i*0.5],[gx+4,0,gz+i*0.5]]]){const q=seg(a,b);if(q){G.moveTo(q[0][0],q[0][1]);G.lineTo(q[1][0],q[1][1])}}}G.stroke();
 const boxes=s.boxes.map(b=>({...b,z:dot(sub(b.c,eye),f)})).sort((a,b)=>b.z-a.z);
@@ -89,7 +97,7 @@ for(const b of boxes){const corners=[];for(const sx of[-1,1])for(const sy of[-1,
 for(const bl of s.blades){if(!bl.valid)continue;const q=seg(bl.a,bl.b);if(!q)continue;G.lineCap="round";
  G.shadowColor=rgb(bl.col);G.shadowBlur=25;G.strokeStyle=rgb(bl.col);G.lineWidth=14;G.beginPath();G.moveTo(q[0][0],q[0][1]);G.lineTo(q[1][0],q[1][1]);G.stroke();
  G.shadowBlur=0;G.strokeStyle="#fff";G.lineWidth=5;G.beginPath();G.moveTo(q[0][0],q[0][1]);G.lineTo(q[1][0],q[1][1]);G.stroke()}
-G.fillStyle="#9fe6ff";G.font="bold 44px system-ui";G.textAlign="center";G.fillText(String(s.score),W/2,60);if(s.combo>1){G.font="24px system-ui";G.fillText("combo x"+s.combo,W/2,92)}}
+G.fillStyle="#9fe6ff";G.font="bold 44px system-ui";G.textAlign="center";if(s.mode_id==0)G.fillText(String(s.score),W/2,60);if(s.combo>1){G.font="24px system-ui";G.fillText("combo x"+s.combo,W/2,92)}}
 function noView(msg){G.fillStyle="#05060c";G.fillRect(0,0,V.width,V.height);G.fillStyle="#789";G.font="28px system-ui";G.textAlign="center";G.fillText(msg,V.width/2,V.height/2)}
 let first=true;
 async function tick(){try{const s=await (await fetch("/state")).json();
@@ -100,7 +108,8 @@ const fw=d.forward;arrow(document.getElementById("top"+h),fw[0],fw[2],colors[h])
 const pitch=Math.round(Math.asin(Math.max(-1,Math.min(1,fw[1])))*180/Math.PI);
 document.getElementById("stat"+h).innerHTML=`${d.rate} Hz · blade ${pitch>=0?"up":"down"} ${Math.abs(pitch)}° · ${d.calibrated?"calibrated":"<b style='color:#fb4;width:auto'>NOT calibrated</b>"} · A ${d.a?"down":"up"}${d.gyro?"":" · <b style='color:#f66;width:auto'>gyro drifting: power-cycle it held still</b>"}`}
 const ph=s.scene&&s.scene.age<1,ok=h=>s.hands[h]&&s.hands[h].age<0.5;
-document.getElementById("status").innerHTML=`Phone: ${ph?"<b style='color:#5d5;width:auto'>connected</b>":"<b style='color:#f66;width:auto'>no game data</b>"} &nbsp; Left: ${ok(0)?s.hands[0].rate+" Hz":"off"} &nbsp; Right: ${ok(1)?s.hands[1].rate+" Hz":"off"}`;
+const SN=["Neon grid","Forest","Space","Moon","Volcano","Study"],MN=["Sword game","Explore"];
+document.getElementById("status").innerHTML=`Phone: ${ph?"<b style='color:#5d5;width:auto'>connected</b> · "+(SN[s.scene.scene_id]||"?")+" · "+(MN[s.scene.mode_id]||"?"):"<b style='color:#f66;width:auto'>no game data</b>"} &nbsp; Left: ${ok(0)?s.hands[0].rate+" Hz":"off"} &nbsp; Right: ${ok(1)?s.hands[1].rate+" Hz":"off"}`;
 first=false}catch(e){}setTimeout(tick,33)}
 tick();
 </script></body></html>"""
@@ -233,7 +242,8 @@ class Tuner:
                     break
                 boxes.append({"c": v4(o)[:3], "ax": [v4(o + 1)[:3], v4(o + 2)[:3], v4(o + 3)[:3]], "col": v4(o + 4)[:3]})
             scene = {"head": {"pos": head[0:3], "fwd": head[3:6], "up": head[6:9]}, "blades": blades,
-                     "boxes": boxes, "score": int(info[2]), "combo": int(info[3])}
+                     "boxes": boxes, "score": int(info[2]), "combo": int(info[3]),
+                     "mode_id": int(round(v4(17)[3])), "scene_id": int(round(v4(18)[3]))}
             with self.lock:
                 self.scene, self.scene_t = scene, time.monotonic()
 
@@ -276,7 +286,7 @@ class Tuner:
                     with tuner.lock:
                         tuner.base[hand], tuner.calibrated[hand] = Q.IDENTITY, False
                     tuner.save()
-                elif self.path.startswith("/command") and data.get("cmd") in (1, 2):
+                elif self.path.startswith("/command") and data.get("cmd") in (1, 2, 10, 11, 12, 13, 14, 15, 20, 21):
                     with tuner.lock:
                         tuner.command_id = int(data["cmd"])
                         tuner.command_seq = (tuner.command_seq + 1) % 256

@@ -344,7 +344,9 @@ fragment TestEyesOut vrTestEyes(TextureMappingVertex in [[ stage_in ]],
 // SaberGame fills the scene (an array of float4):
 //   0-1 blade emitter (w: 1 if the hand is tracked), 2-3 blade tip, 4-5 blade color,
 //   6 info (box count, time, score, combo), 7-10 flash center + radius,
-//   11-14 flash color + strength, 15-16 hilt base, 17 scoreboard center, 18 its right axis,
+//   11-14 flash color + strength, 15-16 hilt base (15.w: background yaw, radians),
+//   17 scoreboard center (w: mode, 0 game, 1 explore), 18 its right axis (w: scene, 0 neon grid,
+//   1+ a 360 panorama bound as texture 0),
 //   19+ boxes, 5 each: center (w: cut face code), three half-axes, color.
 constant int SABER_BOX0 = 19;
 
@@ -397,12 +399,65 @@ static float saberDigit(float2 p, int digit, thread float &unlit) {
     return lit;
 }
 
-static float4 saberScene(float3 ro, float3 rd, constant float4 *S, thread float &distance) {
-    float tHit = 1e4;
-    float3 col = saberSky(rd);
+constexpr sampler panoSampler(filter::linear, s_address::repeat, t_address::clamp_to_edge);
 
-    // Floor: dark with a blue grid, fading into the horizon glow.
-    if (rd.y < -1e-4) {
+// ---- Scene props: static 3D objects you can walk around (buffer 3) --------------
+// P[0] (boxes, spheres, capsules, ambient light), P[1] (ground height, ground material
+// (0 none, 1 regolith, 2 forest floor, 3 basalt with lava cracks, 4 wood planks, 5 metal deck),
+// ground radius m, unused), P[2] unused, then boxes (5 each: center + material, three
+// half-axes, color + glow), spheres (2 each: center + radius, color + material) and
+// capsules (3 each: a + radius, b, color + material). Materials: 0 matte, 1 glowing,
+// 2 Earth texture (texture 1), 3 wood grain, 4 lava.
+static float saberHash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
+static float saberNoise(float2 p) {
+    float2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = saberHash(i), b = saberHash(i + float2(1, 0)), c = saberHash(i + float2(0, 1)), d = saberHash(i + float2(1, 1));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+static float saberFbm(float2 p) {
+    float s = 0.0, a = 0.5;
+    for (int i = 0; i < 4; i++) { s += a * saberNoise(p); p *= 2.03; a *= 0.5; }
+    return s;
+}
+static float3 saberGround(int mat, float2 p, float time, thread float &glow) {
+    glow = 0.0;
+    if (mat == 1) { float c = 0.30 + 0.20 * saberFbm(p * 1.3) + 0.07 * saberNoise(p * 14.0); return float3(c, c, c * 0.96); }
+    if (mat == 2) { return mix(float3(0.09, 0.15, 0.05), float3(0.24, 0.18, 0.09), saberFbm(p * 0.9)) * (0.8 + 0.4 * saberNoise(p * 9.0)); }
+    if (mat == 3) {
+        float crack = 1.0 - smoothstep(0.0, 0.035, abs(saberFbm(p * 0.45 + 3.0) - 0.5));
+        glow = crack * (0.75 + 0.25 * sin(time * 2.0 + p.x * 1.7 + p.y));
+        return float3(0.06, 0.055, 0.05) * (0.7 + 0.6 * saberNoise(p * 6.0));
+    }
+    if (mat == 4) {
+        float w = 0.19, plank = floor(p.x / w);
+        float grain = saberNoise(float2(p.x * 35.0, p.y * 1.5 + plank * 13.0));
+        float gap = step(fract(p.x / w), 0.03);
+        return mix(float3(0.36, 0.21, 0.11), float3(0.52, 0.33, 0.18), grain) * (1.0 - 0.6 * gap);
+    }
+    if (mat == 5) {
+        float2 g = abs(fract(p) - 0.5);
+        float line = step(0.47, max(g.x, g.y));
+        return float3(0.22, 0.23, 0.26) * (1.0 - 0.5 * line) + float3(0.02);
+    }
+    return float3(0.2);
+}
+
+static float4 saberScene(float3 ro, float3 rd, constant float4 *S, constant float4 *P, texture2d<float> pano,
+                         texture2d<float> earth, thread float &distance) {
+    float tHit = 1e4;
+    bool neon = S[18].w < 0.5;
+    float3 col;
+    if (neon) {
+        col = saberSky(rd);
+    } else {   // 360 panorama: image centre straight ahead of the play area
+        float u = fract(0.5 + (atan2(rd.x, -rd.z) - S[15].w) * (0.5 / M_PI_F));
+        float v = acos(clamp(rd.y, -1.0, 1.0)) / M_PI_F;
+        col = pano.sample(panoSampler, float2(u, v)).rgb;
+    }
+
+    // Floor (neon scene only): dark with a blue grid, fading into the horizon glow.
+    if (neon && rd.y < -1e-4) {
         float t = -ro.y / rd.y;
         if (t > 0.0 && t < 60.0) {
             tHit = t;
@@ -414,6 +469,116 @@ static float4 saberScene(float3 ro, float3 rd, constant float4 *S, thread float 
                      + float3(0.10, 0.18, 0.35) * (1.0 - min(min(l1.x, l1.y), 1.0)) * 0.5
                      + float3(0.20, 0.35, 0.70) * (1.0 - min(min(l2.x, l2.y), 1.0)) * 0.6;
             col = saberFog(c, rd, t);
+        }
+    }
+
+
+    // Static props of the scene and its walkable ground (nearest hit wins).
+    {
+        int nb = int(P[0].x), ns = int(P[0].y), nc = int(P[0].z);
+        int kind = 0, idx = -1;
+        float3 hn = float3(0.0, 1.0, 0.0);
+        if (P[1].y > 0.5 && rd.y < -1e-4) {
+            float t = (P[1].x - ro.y) / rd.y;
+            if (t > 0.0 && t < tHit && t < P[1].z) { tHit = t; kind = 4; }
+        }
+        for (int i = 0; i < nb; i++) {
+            int o = 3 + i * 5;
+            float3 c = P[o].xyz;
+            float3 A0 = P[o + 1].xyz, A1 = P[o + 2].xyz, A2 = P[o + 3].xyz;
+            float3 oc = c - ro;
+            float tc = dot(oc, rd);
+            float r2 = dot(A0, A0) + dot(A1, A1) + dot(A2, A2);
+            if (dot(oc, oc) - tc * tc > r2) continue;            // misses the bounding sphere
+            float tmin = 0.0, tmax = 1e4;
+            int axis = 0;
+            float side = 1.0;
+            for (int k = 0; k < 3; k++) {
+                float3 A = k == 0 ? A0 : (k == 1 ? A1 : A2);
+                float h = length(A);
+                float3 u = A / h;
+                float ocu = dot(ro - c, u), d = dot(rd, u);
+                d = abs(d) < 1e-6 ? 1e-6 : d;
+                float t1 = (-h - ocu) / d, t2 = (h - ocu) / d;
+                float tn = min(t1, t2), tf = max(t1, t2);
+                if (tn > tmin) { tmin = tn; axis = k; side = d > 0.0 ? -1.0 : 1.0; }
+                tmax = min(tmax, tf);
+            }
+            if (tmin < tmax && tmin > 0.0 && tmin < tHit) {
+                tHit = tmin; kind = 1; idx = i;
+                hn = normalize(axis == 0 ? A0 : (axis == 1 ? A1 : A2)) * side;
+            }
+        }
+        int so = 3 + nb * 5;
+        for (int i = 0; i < ns; i++) {
+            float3 c = P[so + i * 2].xyz;
+            float r = P[so + i * 2].w;
+            float3 oc = ro - c;
+            float b = dot(oc, rd), h = b * b - (dot(oc, oc) - r * r);
+            if (h > 0.0) {
+                float t = -b - sqrt(h);
+                if (t > 0.0 && t < tHit) { tHit = t; kind = 2; idx = i; }
+            }
+        }
+        int co = so + ns * 2;
+        for (int i = 0; i < nc; i++) {
+            float t = saberCapsule(ro, rd, P[co + i * 3].xyz, P[co + i * 3 + 1].xyz, P[co + i * 3].w);
+            if (t > 0.0 && t < tHit) { tHit = t; kind = 3; idx = i; }
+        }
+        if (kind > 0) {
+            float3 p = ro + rd * tHit;
+            float3 base = float3(0.5);
+            float mat = 0.0, glow = 0.0;
+            if (kind == 4) {
+                base = saberGround(int(P[1].y), p.xz, S[6].y, glow);
+                hn = float3(0.0, 1.0, 0.0);
+            } else if (kind == 1) {
+                int o = 3 + idx * 5;
+                base = P[o + 4].rgb; mat = P[o].w; glow = P[o + 4].w;
+            } else if (kind == 2) {
+                float3 c = P[so + idx * 2].xyz;
+                hn = normalize(p - c);
+                base = P[so + idx * 2 + 1].rgb; mat = P[so + idx * 2 + 1].w;
+                if (mat > 1.5 && mat < 2.5) {   // Earth: spins slowly
+                    float u = fract(atan2(hn.x, -hn.z) * (0.5 / M_PI_F) + S[6].y * 0.01);   // starts with Africa facing you
+                    float v = acos(clamp(hn.y, -1.0, 1.0)) / M_PI_F;
+                    base = earth.sample(panoSampler, float2(u, v)).rgb;
+                }
+            } else {
+                float3 a = P[co + idx * 3].xyz, b = P[co + idx * 3 + 1].xyz;
+                float3 ba = b - a;
+                float y = clamp(dot(p - a, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0);
+                hn = normalize(p - (a + ba * y));
+                base = P[co + idx * 3 + 2].rgb; mat = P[co + idx * 3 + 2].w;
+            }
+            if (mat > 2.5 && mat < 3.5) base *= 0.75 + 0.5 * saberNoise(float2(dot(p.xz, float2(0.7, 0.7)) * 3.0, p.y * 28.0));
+            float amb = P[0].w;
+            float3 sun = length(P[2].xyz) > 0.1 ? normalize(P[2].xyz) : normalize(float3(0.35, 1.0, 0.25));   // P[2]: the scene's sun
+            float diff = max(dot(hn, sun), 0.0);
+            float spec = pow(max(dot(reflect(rd, hn), sun), 0.0), 30.0) * 0.25;
+            float3 lit = base * (amb + (1.0 - amb) * diff) + spec;
+            if (mat > 0.5 && mat < 1.5) lit = base * (1.0 + glow);                       // glowing
+            if (mat > 1.5 && mat < 2.5) {                                               // Earth: day and night sides, blue atmosphere at the rim
+                float rim = pow(1.0 - max(dot(hn, -rd), 0.0), 3.0);
+                lit = base * (0.06 + 1.05 * smoothstep(-0.15, 0.6, dot(hn, sun))) + spec * 0.5
+                    + float3(0.3, 0.55, 1.0) * rim * (0.25 + 0.75 * max(dot(hn, sun), 0.0));
+            }
+            if (mat > 3.5) {                                                            // lava
+                float n = saberNoise(p.xz * 3.0 + S[6].y * 0.4) * 0.6 + saberNoise(p.xz * 9.0 - S[6].y) * 0.4;
+                lit = mix(float3(1.0, 0.25, 0.02), float3(1.0, 0.85, 0.3), n) * 1.6;
+            }
+            if (kind == 4) lit += float3(1.0, 0.35, 0.05) * glow * 1.4;
+            float fade = kind == 4 ? smoothstep(P[1].z * 0.55, P[1].z, tHit) : 0.0;     // ground melts into the far scenery
+            col = mix(lit, col, fade);
+        }
+        for (int i = 0; i < ns; i++) {                                                  // atmosphere glow around Earth
+            if (P[so + i * 2 + 1].w < 1.5 || P[so + i * 2 + 1].w > 2.5) continue;
+            float3 c = P[so + i * 2].xyz;
+            float r = P[so + i * 2].w;
+            float tc = dot(c - ro, rd);
+            if (tc <= 0.0 || tc > tHit + r) continue;
+            float d = length(ro + rd * tc - c);
+            if (d > r) col += float3(0.3, 0.55, 1.0) * 0.55 * exp(-(d - r) / (0.05 * r));
         }
     }
 
@@ -471,7 +636,7 @@ static float4 saberScene(float3 ro, float3 rd, constant float4 *S, thread float 
                 bc = mix(color * 0.5, float3(1.0, 0.92, 0.75) * 2.2, heat) * (0.35 + heat) + glow * edge;
             }
         }
-        col = saberFog(bc, rd, tHit);
+        col = neon ? saberFog(bc, rd, tHit) : bc;
     }
 
     // Hilts: metal capsules behind each blade.
@@ -493,8 +658,8 @@ static float4 saberScene(float3 ro, float3 rd, constant float4 *S, thread float 
         }
     }
 
-    // Scoreboard: glowing seven-segment digits floating ahead.
-    {
+    // Scoreboard: glowing seven-segment digits floating ahead (not in explore mode).
+    if (S[17].w < 0.5) {
         float3 C = S[17].xyz, R = S[18].xyz;
         float3 N = normalize(cross(R, float3(0.0, 1.0, 0.0)));
         float dn = dot(rd, N);
@@ -562,7 +727,10 @@ static float4 saberScene(float3 ro, float3 rd, constant float4 *S, thread float 
 fragment TestEyesOut vrSaberEyes(TextureMappingVertex in [[ stage_in ]],
                                  constant VRUniforms &u [[ buffer(0) ]],
                                  constant VRFrameUniforms &f [[ buffer(1) ]],
-                                 constant float4 *scene [[ buffer(2) ]]) {
+                                 constant float4 *scene [[ buffer(2) ]],
+                                 constant float4 *props [[ buffer(3) ]],
+                                 texture2d<float> pano [[ texture(0) ]],
+                                 texture2d<float> earth [[ texture(1) ]]) {
     float2 uv = in.textureCoordinate;
     int eye = uv.x < 0.5 ? 0 : 1;
     float4 fov = f.fovTan[eye];
@@ -573,7 +741,7 @@ fragment TestEyesOut vrSaberEyes(TextureMappingVertex in [[ stage_in ]],
     float3 rd = normalize((u.headToWorld * float4(normalize(float3(tanAngle, -1.0)), 0.0)).xyz);
     TestEyesOut out;
     float distance;
-    out.color = half4(saberScene(ro, rd, scene, distance));
+    out.color = half4(saberScene(ro, rd, scene, props, pano, earth, distance));
     out.distance = distance;
     return out;
 }
