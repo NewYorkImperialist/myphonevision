@@ -770,6 +770,12 @@ final class SaberGame {
     var anchorPos = SIMD3<Float>(0, 1.6, 0), anchorFwd = SIMD3<Float>(0, 0, -1), anchored = false
     var lastTime: Double = 0
 
+    /// Put the play area in front of the current head again (on tap to recenter).
+    func recenter() {
+        lock.lock(); defer { lock.unlock() }
+        anchored = false
+    }
+
     func reset() {
         lock.lock(); defer { lock.unlock() }
         cubes.removeAll(); pieces.removeAll(); flashes.removeAll()
@@ -790,7 +796,12 @@ final class SaberGame {
         let hp = SIMD3<Float>(head.columns.3.x, head.columns.3.y, head.columns.3.z)
         var fwd = -SIMD3<Float>(head.columns.2.x, 0, head.columns.2.z)
         fwd = simd_length(fwd) > 1e-3 ? simd_normalize(fwd) : SIMD3(0, 0, -1)
-        if !anchored { anchorPos = hp; anchorFwd = fwd; anchored = true }
+        if !anchored {   // start (or recenter): the cubes and the scoreboard go in front of where you face
+            anchorPos = hp; anchorFwd = fwd; anchored = true
+            cubes.removeAll(); pieces.removeAll()
+            for _ in 0..<8 { spawn() }
+            spawnTimer = 0.35
+        }
 
         for h in 0..<2 {
             guard var m = HandReceiver.shared.pose(h) else { blades[h].valid = false; blades[h].length = 0; continue }

@@ -15,7 +15,10 @@ struct Main: App {
         WindowGroup {
             MetalView()
                 // Tap: recenter. Hold 1 s: back to the lobby (and out of test mode).
-                .onTapGesture { EventHandler.shared.recenter() }
+                .onTapGesture {
+                    EventHandler.shared.recenter()
+                    if Renderer.shared?.saberMode == true { Renderer.shared?.saberGame.recenter() }
+                }
                 .onLongPressGesture(minimumDuration: 1) {
                     Renderer.shared?.testMode = false
                     isLobbyPresented = true
