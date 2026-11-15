@@ -728,13 +728,24 @@ static float4 saberScene(float3 ro, float3 rd, constant float4 *S, constant floa
 // ---- Jumpscare: an original animatronic face lunging at you (or a custom image) -------
 // Head-locked, drawn over the scene for 1.6 s after the admin page's Jumpscare button.
 // q: this pixel's view tangent; js: seconds since it started.
-static float3 jumpscare(float2 q, float eyeSign, float js, bool custom, texture2d<float> img) {
+static float3 jumpscare(float2 q, float eyeSign, float js, bool custom, bool atlas, texture2d<float> img) {
     float fade = 1.0 - smoothstep(1.3, 1.6, js);
     float s = mix(0.2, 1.25, smoothstep(0.0, 0.16, js)) + 0.05 * sin(js * 40.0);
     float2 shake = float2(sin(js * 93.0), cos(js * 71.0)) * 0.05 * (1.0 - js / 1.6);
     float2 p = (q - shake - float2(eyeSign * 0.03, 0.0)) / s;           // face space: the face fills |p| < ~1
     float strobe = step(0.5, fract(js * 13.0));
     float3 col = float3(0.55, 0.02, 0.0) * strobe * 0.6;
+    if (atlas) {   // pre-rendered stereo lunge: 32 frames x 2 eyes, 512 px tiles in an 8 x 8 grid, 90 degree views
+        int frame = clamp(int(js / 1.3 * 32.0), 0, 31);
+        int tile = frame * 2 + (eyeSign < 0.0 ? 0 : 1);
+        float2 local = float2((q.x - shake.x) * 0.5 + 0.5, 0.5 - (q.y - shake.y) * 0.5);
+        float3 c = float3(0.0);
+        if (all(local >= 0.0) && all(local <= 1.0)) {
+            float2 uv = (float2(float(tile % 8), float(tile / 8)) + clamp(local, 0.002, 0.998)) / 8.0;
+            c = img.sample(panoSampler, uv).rgb;
+        }
+        return (c + float3(0.25, 0.0, 0.0) * strobe * (1.0 - js / 1.6)) * fade;
+    }
     if (custom) {
         float2 uv = float2(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5);
         if (all(uv >= 0.0) && all(uv <= 1.0)) col = img.sample(panoSampler, uv).rgb;
@@ -788,7 +799,7 @@ fragment TestEyesOut vrSaberEyes(TextureMappingVertex in [[ stage_in ]],
     float distance;
     float4 c = saberScene(ro, rd, scene, props, pano, earth, distance);
     float js = scene[16].w;                                              // seconds into a jumpscare, or < 0
-    if (js >= 0.0 && js < 1.6) { c = float4(jumpscare(tanAngle, eye == 0 ? -1.0 : 1.0, js, scene[2].w > 0.5, scare), 1.0); distance = 0.3; }
+    if (js >= 0.0 && js < 1.6) { c = float4(jumpscare(tanAngle, eye == 0 ? -1.0 : 1.0, js, scene[2].w > 0.5, scene[3].w > 0.5, scare), 1.0); distance = 0.3; }
     out.color = half4(c);
     out.distance = distance;
     return out;

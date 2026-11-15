@@ -412,7 +412,8 @@ final class Renderer {
                     propsVersion = version
                 }
                 encoder.setFragmentBuffer(propsBuffer, offset: 0, index: 3)
-                encoder.setFragmentTexture(Jumpscare.hasCustomImage ? namedTexture("jumpscare_custom") : placeholderTexture, index: 2)
+                encoder.setFragmentTexture(Jumpscare.hasAtlas ? namedTexture("jumpscare_atlas")
+                                           : Jumpscare.hasCustomImage ? namedTexture("jumpscare_custom") : placeholderTexture, index: 2)
                 saberFrame += 1
                 if saberFrame % 2 == 0 { HandReceiver.shared.sendSpectator(head: renderedHead, scene: scene) }   // 30-60 Hz live view
             }
@@ -1217,6 +1218,7 @@ final class SaberGame {
         S[6] = SIMD4(Float(n), t, Float(score), Float(combo))
         if let js = jumpscareAt, t - js < 1.6 { S[16].w = t - js } else { S[16].w = -1; jumpscareAt = nil }
         S[2].w = Jumpscare.hasCustomImage ? 1 : 0
+        S[3].w = Jumpscare.hasAtlas ? 1 : 0
         return S
     }
 }
@@ -1270,6 +1272,7 @@ struct SceneProps {
 /// Drop your own picture into the asset catalog as "jumpscare_custom" to use it instead of the robot face.
 enum Jumpscare {
     static let hasCustomImage = UIImage(named: "jumpscare_custom") != nil
+    static let hasAtlas = UIImage(named: "jumpscare_atlas") != nil   // pre-rendered stereo creature (wins over the others)
     private static var player: AVAudioPlayer?
 
     static func play() {
