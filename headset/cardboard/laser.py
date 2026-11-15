@@ -53,7 +53,7 @@ for n, pg in enumerate(g["pages"], 1):
     print(f"page {n}: {write(f'headset-page{n}', PW, PH, cuts, scores)} (cuts, scores)")
 
 if v2:
-    # Only the parts v2 changes (no spacers P, PL, K; nothing unchanged), on two sheets.
+    # Only the parts v2 changes (no spacers P, PL, K; nothing unchanged), on US Letter pages.
     parts = {"R1": g["face_ring"](0), "R2": g["face_ring"](1), "A": g["top_wall"](), "B": g["bottom_wall"](),
              "FH": g["hook_doublers"](), "SC": g["side_wall"](False), "SU": g["side_wall"](True)}
 
@@ -77,9 +77,13 @@ if v2:
         print(f"{name} {w} x {h} mm: {write(name, w, h, cuts, scores)} (cuts, scores)")
 
     size = {k: (p.shape.bounds[2] - p.shape.bounds[0], p.shape.bounds[3] - p.shape.bounds[1]) for k, p in parts.items()}
-    M = 5.0
-    sheet("headset-v2-recut-1-R1-R2", [("R1", 0, M, M), ("R2", 0, M, 2 * M + size["R1"][1])])
-    xr = 2 * M + size["A"][0]
-    sheet("headset-v2-recut-2-A-B-SC-SU-FH", [("A", 0, M, M), ("B", 0, M, 2 * M + size["A"][1]),
-                                              ("SC", 0, xr, M), ("SU", 0, xr, 2 * M + size["SC"][1]),
-                                              ("FH", 0, xr, 3 * M + 2 * size["SC"][1])])
+    L = 10.0   # US Letter pages: the size the Epilog setup is known to cut without clipping (v1 was cut from them)
+    sheets = {"headset-v2-recut-1-R1": [("R1", 90, L, L)],
+              "headset-v2-recut-2-R2": [("R2", 90, L, L)],
+              "headset-v2-recut-3-A-FH": [("A", 0, L, L), ("FH", 0, L, L + size["A"][1] + 5)],
+              "headset-v2-recut-4-B-SC-SU": [("B", 0, L, L), ("SC", 0, L, L + size["B"][1] + 5),
+                                             ("SU", 0, L + size["SC"][0] + 5, L + size["B"][1] + 5)]}
+    for name, items in sheets.items():
+        sheet(name, items, PW, PH, L)
+    subprocess.run(["rsvg-convert", "-f", "pdf", "-o", os.path.join(out, "headset-v2-recut-all-4-pages.pdf"),
+                    *[os.path.join(out, n + ".svg") for n in sheets]], check=True)
