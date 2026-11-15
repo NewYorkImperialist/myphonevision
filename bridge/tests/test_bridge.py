@@ -65,6 +65,20 @@ def test_arm_model_puts_level_controller_in_front_and_to_the_side():
     assert turned[0] < -0.2  # head and hand turned left: hand now toward -X
 
 
+def test_arm_model_has_no_jump_when_controller_is_turned_half_way_round():
+    # Twisting past 180 deg, or pointing sideways with a twist, used to flip the elbow ~53 cm.
+    arm = ArmModel()
+    head = (0.0, 1.6, 0.0)
+    for base in (Q.IDENTITY, Q.rot_y(math.pi / 2), Q.axis_angle((1, 0, 0), 0.6)):
+        a = arm.position(1, head, Q.IDENTITY, Q.mul(base, Q.axis_angle((0, 0, 1), math.pi - 0.02)))
+        b = arm.position(1, head, Q.IDENTITY, Q.mul(base, Q.axis_angle((0, 0, 1), math.pi + 0.02)))
+        assert math.dist(a, b) < 0.02
+    # Pointing straight behind has no "right" side for the elbow: nudging left vs right mustn't swing it.
+    a = arm.position(1, head, Q.IDENTITY, Q.mul(Q.rot_y(math.pi), Q.axis_angle((1, 0, 0), 0.05)))
+    b = arm.position(1, head, Q.IDENTITY, Q.mul(Q.rot_y(math.pi), Q.axis_angle((1, 0, 0), -0.05)))
+    assert math.dist(a, b) < 0.05
+
+
 def test_yaw_snap_works_pointing_at_floor_and_ceiling():
     o = ControllerOrientation(mount=MOUNTS["flat-x-forward"])
     for pitch in (-math.pi / 2 + 0.02, math.pi / 2 - 0.02):  # nose down, nose up

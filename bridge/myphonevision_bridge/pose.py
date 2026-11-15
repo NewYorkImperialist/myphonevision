@@ -46,8 +46,12 @@ class ArmModel:
         side = -1.0 if hand == 0 else 1.0
         sx, sy, sz = self.shoulder
         shoulder = Q.add(hmd_pos, Q.rotate(body, (side * sx, sy, sz)))
-        ctrl_in_body = Q.mul(Q.conj(body), ctrl_rot)
-        elbow_rot = Q.mul(body, Q.slerp(Q.IDENTITY, ctrl_in_body, self.elbow_follow))
+        # Elbow follows where the controller points, not its twist: slerping the full rotation
+        # flips the shortest path at 180 deg and throws the elbow ~53 cm to the other side.
+        fwd = Q.rotate(Q.conj(body), Q.rotate(ctrl_rot, (0.0, 0.0, -1.0)))
+        swing = Q.normalize((1.0 - fwd[2], fwd[1], -fwd[0], 0.0)) if fwd[2] < 0.999 else (0.0, 1.0, 0.0, 0.0)  # (0,0,-1) -> fwd; straight back: over the top
+        follow = self.elbow_follow * min(1.0, (1.0 - fwd[2]) / 0.5)  # fades to 0 within 60 deg of straight back, where the elbow has no side to pick
+        elbow_rot = Q.mul(body, Q.slerp(Q.IDENTITY, swing, follow))
         elbow = Q.add(shoulder, Q.rotate(elbow_rot, (0.0, -self.upper_arm, 0.0)))
         reach = self.forearm + self.grip_offset
         return Q.add(elbow, Q.rotate(ctrl_rot, (0.0, 0.0, -reach)))
