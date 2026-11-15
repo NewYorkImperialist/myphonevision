@@ -19,8 +19,9 @@ HAIR, SCORE_W, RED, BLUE = 0.01, 0.5, "#ff0000", "#0000ff"
 
 def write(name, w, h, cuts, scores):
     """cuts: closed rings; scores: open polylines; points in mm, y down."""
+    w, h = round(w, 3), round(h, 3)
     svg = ['<?xml version="1.0" encoding="UTF-8"?>',
-           f'<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="{w}mm" height="{h}mm" viewBox="0 0 {w} {h}">']
+           f'<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="{w:g}mm" height="{h:g}mm" viewBox="0 0 {w:g} {h:g}">']
     dxf = ["0", "SECTION", "2", "HEADER", "9", "$INSUNITS", "70", "4", "0", "ENDSEC",
            "0", "SECTION", "2", "TABLES", "0", "TABLE", "2", "LAYER", "70", "2"]
     for layer, col in (("CUT", 1), ("SCORE", 5)):
@@ -85,5 +86,12 @@ if v2:
                                              ("SU", 0, L + size["SC"][0] + 5, L + size["B"][1] + 5)]}
     for name, items in sheets.items():
         sheet(name, items, PW, PH, L)
+    # The same parts on one sheet, exactly 19 x 14 in so the Epilog's Piece Size can be typed in whole inches.
+    M = 5.0
+    row2 = M + max(size["R1"][1], size["R2"][1]) + M
+    xb, xs = M + size["A"][0] + M, 2 * M + size["A"][0] + size["B"][0] + M
+    sheet("headset-v2-recut-sheet-19x14in", [("R1", 0, M, M), ("R2", 0, 2 * M + size["R1"][0], M), ("A", 0, M, row2), ("B", 0, xb, row2),
+                                             ("FH", 0, xb, row2 + size["B"][1] + M), ("SC", 0, xs, row2), ("SU", 0, xs, row2 + size["SC"][1] + M)],
+          19 * 25.4, 14 * 25.4, M)
     subprocess.run(["rsvg-convert", "-f", "pdf", "-o", os.path.join(out, "headset-v2-recut-all-4-pages.pdf"),
                     *[os.path.join(out, n + ".svg") for n in sheets]], check=True)
