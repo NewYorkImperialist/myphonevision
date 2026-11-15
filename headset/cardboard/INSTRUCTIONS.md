@@ -1,6 +1,6 @@
 # Cardboard headset: iPhone 16 Pro + two Carson TriView TV-36
 
-A flat-pack cardboard box that holds the phone, two whole TV-36 magnifiers (lenses swung out and stacked, cases sticking up through the top) and a strap. Print `template.pdf`, stick the pages on corrugated card, cut, slot together, tape.
+A flat-pack cardboard box that holds the phone, two whole TV-36 magnifiers set to **5.5x** (top and bottom lenses swung out, middle lens left in the case; cases sticking up through the top) and a strap. Print `template.pdf`, stick the pages on corrugated card, cut, slot together, tape.
 
 **Time:** about 2 to 2.5 hours with 2 or 3 people (1 h cutting in parallel, 40 min assembly, 30 min fitting and focus). About 3.5 hours alone.
 
@@ -49,16 +49,16 @@ Fold lines need no allowance: with the top layer cut, the card hinges on its inn
 
 The focal length of the stacked magnifier is an estimate, and this test replaces it with a number.
 
-1. Swing all three lenses out of one magnifier and stack them. Carson logo toward your eye.
+1. Set one magnifier to **5.5x**: swing out the top and bottom lenses only, middle lens stays in the case (manual). Carson logo toward your eye.
 2. Lay the phone flat showing small text at full brightness.
 3. Hold the stack over the text with your eye about 2 cm above it. Start touching the screen and lift until the text is sharp and comfortable, not just readable.
 4. Have someone measure the gap from the screen to the bottom face of the lens stack. Write it down: this is **d**.
 
-The template covers d from 12 to 30 mm. The estimate is about 20.
+**Already measured (2026-11-14, 5.5x): d ≈ 30 mm** (bottom of the bottom lens to the screen; top of the top lens at 50 mm), eye right at the top lens. The template covers d from 24 to 32 mm, and at d = 30 the stack sits 2 mm short of the front, so the eyes are as close as the face ring and foam allow. Re-check with the method below only if a different person's eyes disagree.
 
 - **d between 12 and 30:** carry on.
-- **d under 22 and you have 5 minutes:** regenerate with `python3 gen.py --d-max <d + 4>`. The body gets shorter and your eyes sit that much closer to the lenses, which widens the view.
-- **d outside 12 to 30:** regenerate with `--d-min` / `--d-max` around your number.
+- **To bring the eyes closer:** regenerate with `python3 gen.py --d-max <d + 1>`. The carrier then sits flush with the front at your d.
+- **d outside 24 to 32:** regenerate with `--d-min` / `--d-max` around your number.
 
 ## Step 2. Print, check, stick, cut (about 1 h, split the pages between people)
 
@@ -80,7 +80,7 @@ Cut in this order so assembly can start early: C and S, then F and B, then SC, S
 
 Everything about the magnifier except the rim diameter (38.75) and stack thickness (21.09) is unmeasured, so the cutouts are oversized or meant to be trimmed.
 
-1. Swing out and stack the lenses of both magnifiers. Lower each into the carrier, case pointing up: the rims drop into the S seats, the thumb tabs into the small notches below them.
+1. Set both magnifiers to 5.5x (top and bottom lenses out, middle lens in the case). Lower each into the carrier, case pointing up: the rims drop into the S seats, the thumb tabs into the small notches below them.
 2. Trim until each stack sits all the way down:
     - Rim won't go in: shave the round part of the S seat.
     - Thumb tabs hit: enlarge the notch under the seat.
@@ -121,7 +121,7 @@ The phone must touch card only at the last 18 mm of each long edge, so nothing p
 3. Push the carrier forward or back by the cases until the picture is sharp with relaxed eyes. Read the **scale** on A beside the left notch: the number level with the back face of the lens stack is d. It should match step 1.
 4. Lock it: trim two **K** pieces per magnifier so they fill the notch in front of and behind the case, and tape them flat onto A. They block light and stop the carrier sliding.
 5. Tape or band the two cases together above the headset so they can't rock.
-6. In the iPhone app's lens settings, set screen-to-lens to **d + 10.5 mm** (the middle of the stack).
+6. In the iPhone app's lens settings, set screen-to-lens to **d + 10 mm** (the middle of the 5.5x pair, about 20 mm deep): **≈ 40 mm** at d = 30.
 
 ## Step 8. Phone, cable, flap, bands
 
@@ -151,7 +151,7 @@ The phone must touch card only at the last 18 mm of each long edge, so nothing p
 
 | What | Template assumes | How to get the real one | Step |
 | --- | --- | --- | --- |
-| Focus distance d (rear lens face to screen) | 12 to 30 mm of travel | Bench focus test | 1, 7 |
+| Focus distance d (rear lens face to screen) | 24 to 32 mm of travel (measured ≈ 30 at 5.5x) | Bench focus test | 1, 7 |
 | Magnifier neck, hinge and case outline | 43 mm wide notches (case is 40.6 in the manual) | Lower it in, pencil-mark, trim | 4 |
 | Case thickness beyond the lens stack | Open notches in the plates above the lenses | Same | 4 |
 | Thumb tabs | 10 × 5 mm notch under each seat | Same | 4 |

@@ -28,8 +28,8 @@ from shapely.ops import unary_union
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--t", type=float, default=3.0, help="card thickness, mm")
-ap.add_argument("--d-max", type=float, default=30.0, help="longest rear-lens-face-to-screen distance, mm")
-ap.add_argument("--d-min", type=float, default=12.0)
+ap.add_argument("--d-max", type=float, default=32.0, help="longest rear-lens-face-to-screen distance, mm")
+ap.add_argument("--d-min", type=float, default=24.0)
 args = ap.parse_args()
 T, D_MAX, D_MIN = args.t, args.d_max, args.d_min
 
@@ -352,7 +352,7 @@ subprocess.run(["rsvg-convert", "-f", "pdf", "-o", str(here / "template.pdf"), *
 def overview():
     out = []
     card, foam, lens = "#d9b98a", "#f2d35b", "#bbb"
-    zc = D_MAX - 20                                         # carrier drawn where d = 20
+    zc = D_MAX - 30                                         # carrier drawn where d = 30 (measured at 5.5x)
     z_r = zc + T + 0.5 + STACK                              # rear lens face
 
     def rect(a0, b0, a1, b1, fill, extra=""):               # y up

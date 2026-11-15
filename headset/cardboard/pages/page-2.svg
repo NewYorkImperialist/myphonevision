@@ -1,29 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="215.9mm" height="279.4mm" viewBox="0 0 215.9 279.4">
 <rect width="215.9" height="279.4" fill="#fff"/>
-<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M21.000,76.040 L21.000,10.000 L194.600,10.000 L194.600,76.040 L185.600,76.040 L185.600,79.040 L169.600,79.040 L169.600,76.040 L126.800,76.040 L119.607,54.355 L119.385,53.781 L119.136,53.218 L118.859,52.669 L118.556,52.133 L118.227,51.613 L117.872,51.110 L117.494,50.625 L117.092,50.159 L116.667,49.713 L116.221,49.288 L115.755,48.886 L115.270,48.508 L114.767,48.153 L114.247,47.824 L113.711,47.521 L113.162,47.244 L112.599,46.995 L112.025,46.773 L111.440,46.580 L110.847,46.416 L110.246,46.281 L109.640,46.176 L109.029,46.100 L108.415,46.055 L107.800,46.040 L107.185,46.055 L106.571,46.100 L105.960,46.176 L105.354,46.281 L104.753,46.416 L104.160,46.580 L103.575,46.773 L103.001,46.995 L102.438,47.244 L101.889,47.521 L101.353,47.824 L100.833,48.153 L100.330,48.508 L99.845,48.886 L99.379,49.288 L98.933,49.713 L98.508,50.159 L98.106,50.625 L97.728,51.110 L97.373,51.613 L97.044,52.133 L96.741,52.669 L96.464,53.218 L96.215,53.781 L95.993,54.355 L88.800,76.040 L46.000,76.040 L46.000,79.040 L30.000,79.040 L30.000,76.040 L21.000,76.040 Z"/>
+<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M21.000,78.040 L21.000,10.000 L194.600,10.000 L194.600,78.040 L185.600,78.040 L185.600,81.040 L169.600,81.040 L169.600,78.040 L126.800,78.040 L119.607,56.355 L119.385,55.781 L119.136,55.218 L118.859,54.669 L118.556,54.133 L118.227,53.613 L117.872,53.110 L117.494,52.625 L117.092,52.159 L116.667,51.713 L116.221,51.288 L115.755,50.886 L115.270,50.508 L114.767,50.153 L114.247,49.824 L113.711,49.521 L113.162,49.244 L112.599,48.995 L112.025,48.773 L111.440,48.580 L110.847,48.416 L110.246,48.281 L109.640,48.176 L109.029,48.100 L108.415,48.055 L107.800,48.040 L107.185,48.055 L106.571,48.100 L105.960,48.176 L105.354,48.281 L104.753,48.416 L104.160,48.580 L103.575,48.773 L103.001,48.995 L102.438,49.244 L101.889,49.521 L101.353,49.824 L100.833,50.153 L100.330,50.508 L99.845,50.886 L99.379,51.288 L98.933,51.713 L98.508,52.159 L98.106,52.625 L97.728,53.110 L97.373,53.613 L97.044,54.133 L96.741,54.669 L96.464,55.218 L96.215,55.781 L95.993,56.355 L88.800,78.040 L46.000,78.040 L46.000,81.040 L30.000,81.040 L30.000,78.040 L21.000,78.040 Z"/>
 <path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M88.650,20.800 L88.650,24.100 L102.950,24.100 L102.950,20.800 L88.650,20.800 Z"/>
 <path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M162.950,20.800 L148.650,20.800 L148.650,24.100 L162.950,24.100 L162.950,20.800 Z"/>
-<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M24.000,119.790 L27.000,119.790 L27.000,85.040 L93.040,85.040 L93.040,174.540 L27.000,174.540 L27.000,139.790 L24.000,139.790 L24.000,119.790 Z"/>
-<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M82.240,119.640 L78.940,119.640 L78.940,139.940 L82.240,139.940 L82.240,119.640 Z"/>
-<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M180.040,119.790 L180.040,85.040 L114.000,85.040 L114.000,123.290 L124.800,123.290 L124.800,119.640 L128.100,119.640 L128.100,139.940 L124.800,139.940 L124.800,136.290 L114.000,136.290 L114.000,174.540 L180.040,174.540 L180.040,139.790 L183.040,139.790 L183.040,119.790 L180.040,119.790 Z"/>
-<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M40.000,204.540 L40.000,180.540 L95.000,180.540 L150.000,180.540 L150.000,204.540 L150.000,228.540 L95.000,228.540 L40.000,228.540 L40.000,204.540 Z"/>
-<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M95.000,228.540 L95.000,180.540"/>
-<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M40.000,204.540 L150.000,204.540"/>
-<text x="169.60" y="46.04" font-size="6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">B</text>
-<text x="169.60" y="50.54" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">step 5</text>
-<text x="147.80" y="72.04" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">FRONT</text>
+<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M24.000,121.790 L27.000,121.790 L27.000,87.040 L95.040,87.040 L95.040,176.540 L27.000,176.540 L27.000,141.790 L24.000,141.790 L24.000,121.790 Z"/>
+<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M84.240,121.640 L80.940,121.640 L80.940,141.940 L84.240,141.940 L84.240,121.640 Z"/>
+<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M182.040,121.790 L182.040,87.040 L114.000,87.040 L114.000,125.290 L124.800,125.290 L124.800,121.640 L128.100,121.640 L128.100,141.940 L124.800,141.940 L124.800,138.290 L114.000,138.290 L114.000,176.540 L182.040,176.540 L182.040,141.790 L185.040,141.790 L185.040,121.790 L182.040,121.790 Z"/>
+<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M40.000,206.540 L40.000,182.540 L95.000,182.540 L150.000,182.540 L150.000,206.540 L150.000,230.540 L95.000,230.540 L40.000,230.540 L40.000,206.540 Z"/>
+<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M95.000,230.540 L95.000,182.540"/>
+<path class="cut" fill="none" stroke="#000" stroke-width="0.35" d="M40.000,206.540 L150.000,206.540"/>
+<text x="169.60" y="48.04" font-size="6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">B</text>
+<text x="169.60" y="52.54" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">step 5</text>
+<text x="147.80" y="74.04" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">FRONT</text>
 <text x="28.00" y="15.00" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">CAM</text>
 <text x="187.60" y="15.00" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">USB</text>
-<text x="55.00" y="152.54" font-size="6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">SC</text>
-<text x="55.00" y="157.04" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">step 5</text>
-<text x="35.00" y="113.79" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">FRONT</text>
-<text x="55.00" y="91.04" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">TOP</text>
-<text x="152.04" y="152.54" font-size="6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">SU</text>
-<text x="152.04" y="157.04" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">step 5</text>
-<text x="172.04" y="113.79" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">FRONT</text>
-<text x="152.04" y="91.04" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">TOP</text>
-<text x="31.00" y="204.54" font-size="6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">K</text>
-<text x="31.00" y="209.04" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">x4  step 7</text>
+<text x="55.00" y="154.54" font-size="6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">SC</text>
+<text x="55.00" y="159.04" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">step 5</text>
+<text x="35.00" y="115.79" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">FRONT</text>
+<text x="55.00" y="93.04" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">TOP</text>
+<text x="154.04" y="154.54" font-size="6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">SU</text>
+<text x="154.04" y="159.04" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">step 5</text>
+<text x="174.04" y="115.79" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">FRONT</text>
+<text x="154.04" y="93.04" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">TOP</text>
+<text x="31.00" y="206.54" font-size="6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">K</text>
+<text x="31.00" y="211.04" font-size="2.6" text-anchor="middle" font-family="DejaVu Sans, Liberation Sans, Arial, sans-serif">x4  step 7</text>
 <path id="p2-scale" class="scale" fill="none" stroke="#000" stroke-width="0.35" d="M10.0,266.4 L60.0,266.4"/>
 <path fill="none" stroke="#000" stroke-width="0.35" d="M10.0,264.4 L10.0,268.4"/>
 <path fill="none" stroke="#000" stroke-width="0.35" d="M60.0,264.4 L60.0,268.4"/>
