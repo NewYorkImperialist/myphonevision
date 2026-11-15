@@ -10,7 +10,8 @@ Draft. `python3 gen.py --v2` writes this folder; `python3 laser.py --v2` writes 
 | Wrap tabs on the ring | none | **8 per layer:** 2 top, 2 bottom, 2 on each side. They fold back over A, B, SC and SU and get glued down. R2's tabs fold one card further out, so they wrap over R1's. |
 | Strap ears | 16 mm deep, 42 mm long | 22 mm deep, 50 mm long: 9 mm of card around each strap slot instead of 6, and two layers |
 | Body tabs into the ring (A, B, SC, SU) | 3 mm long, flush with R | **14 mm:** through both layers, plus 8 mm sticking out to fold flat and tape or glue |
-| A's two end tabs | 6–22 mm from the ends | 2–14 mm, to leave room for the top wrap tabs |
+| Tab widths (= slot lengths in R) | A 16 + 12 + 16, B 16 + 16, sides 20 | A 12 + 16 + 12, **B 24 + 24, sides 30**. A's end tabs move to 2–14 mm from the ends, to leave room for the top wrap tabs |
+| Slot width in R | 3.3 mm (0.3 clearance) | **3.5 mm** (0.5 clearance): each slot goes through two glued layers, which never line up perfectly |
 | F's band hooks | one layer | **FH × 4:** doublers glued onto the part of each hook outside the body |
 
 ## What to cut

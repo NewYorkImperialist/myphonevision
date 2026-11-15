@@ -72,6 +72,10 @@ EAR = 22.0 if V2 else 16.0                       # strap ear depth; v2 leaves 9 
 EAR_L = 25.0 if V2 else 21.0                     # half the side ears' length
 TAB = 2 * T + 8 if V2 else T                     # body tabs: through R (two layers in v2) plus 8 mm to fold and tape
 A_TAB = (2.0, 14.0) if V2 else (6.0, 22.0)       # A's end tabs; v2 moves them out to make room for R's top wrap tabs
+A_MID = 8.0 if V2 else 6.0                       # half-width of A's middle tab (the magnifier notches start at 10)
+B_TAB = (6.0, 30.0) if V2 else (6.0, 22.0)       # B's two tabs, from each end
+S_TAB = 15.0 if V2 else 10.0                     # half-length of the side walls' tabs
+R_FIT = 0.5 if V2 else FIT                       # ring slots: v2's go through two glued layers, so a little looser
 WRAP = 25.0                                      # v2: R's wrap tabs, folded back along the body
 STRAP = (4.0, 32.0)                              # issue #9
 LENS_X = (-IPD / 2, IPD / 2)
@@ -112,7 +116,7 @@ class Part:
 # ---- Parts -------------------------------------------------------------------
 def top_wall():          # seen from above: right = +x, up = front
     flap_h = H + T + LIP
-    s = unary_union([box(-T, -DEPTH, W + T, 0), box(XC - 6, 0, XC + 6, TAB),
+    s = unary_union([box(-T, -DEPTH, W + T, 0), box(XC - A_MID, 0, XC + A_MID, TAB),
                      box(A_TAB[0], 0, A_TAB[1], TAB), box(W - A_TAB[1], 0, W - A_TAB[0], TAB),
                      box(XCUT, -DEPTH - flap_h, W + T, -DEPTH)])
     for lx in LENS_X:
@@ -136,7 +140,7 @@ def top_wall():          # seen from above: right = +x, up = front
 
 
 def bottom_wall():       # seen from below: right = +x, up = back
-    s = unary_union([box(-T, 0, W + T, DEPTH), box(6, -TAB, 22, 0), box(W - 22, -TAB, W - 6, 0)])
+    s = unary_union([box(-T, 0, W + T, DEPTH), box(B_TAB[0], -TAB, B_TAB[1], 0), box(W - B_TAB[1], -TAB, W - B_TAB[0], 0)])
     s -= at(nose(30), XC, 0)
     for hx in HOOKS:
         s -= box(hx - 7 - FIT / 2, ZS - T - FIT / 2, hx + 7 + FIT / 2, ZS + FIT / 2)
@@ -146,7 +150,7 @@ def bottom_wall():       # seen from below: right = +x, up = back
 
 
 def side_wall(usb):      # seen from outside; cam: right = back, usb: right = front
-    s = unary_union([box(0, 0, DEPTH, H), box(-TAB, YC - 10, 0, YC + 10)])
+    s = unary_union([box(0, 0, DEPTH, H), box(-TAB, YC - S_TAB, 0, YC + S_TAB)])
     s -= box(ZS - T - FIT / 2, YC - 10 - FIT / 2, ZS + FIT / 2, YC + 10 + FIT / 2)
     if usb:
         s -= box(ZS + 0.5 - 1, YC - USB_W / 2, DEPTH + 1, YC + USB_W / 2)
@@ -171,11 +175,11 @@ def face_ring(layer=0):  # x centred; symmetric, so it has no left or right. v2:
     if V2:
         # Wrap tabs fold back over the body's outside. R2's fold sits one card further out, so it wraps around R1's tab.
         hinge = T * (1 + layer)
-        a_slot = XC - A_TAB[1] - FIT / 2                         # inner edge of the slot for A's end tab
+        a_slot = XC - A_TAB[1] - R_FIT / 2                         # inner edge of the slot for A's end tab
         spans = []
         for sx in (-1, 1):
             spans.append(("y", H + hinge, 1, sorted((sx * (IPD / 2 + SLOT_W / 2 + 1.5), sx * (a_slot - 4)))))   # top, clear of the magnifier notches
-            spans.append(("y", -hinge, -1, sorted((sx * (NOSE_W / 2 + 3), sx * (XC - 22 - FIT / 2 - 4)))))   # bottom, clear of the nose
+            spans.append(("y", -hinge, -1, sorted((sx * (NOSE_W / 2 + 3), sx * (XC - B_TAB[1] - R_FIT / 2 - 4)))))   # bottom, clear of the nose
             for y0, y1 in ((4, YC - EAR_L - 1.5), (YC + EAR_L + 1.5, H - 4)):                                 # sides, clear of the ears
                 spans.append(("x", sx * (XC + hinge), sx, (y0, y1)))
         for axis, c, d, (u0, u1) in spans:     # 4 mm from a slot leaves ~3 mm of card beside the slit's end
@@ -191,11 +195,12 @@ def face_ring(layer=0):  # x centred; symmetric, so it has no left or right. v2:
         x = sx * (XC + o + EAR / 2)
         s -= box(x - STRAP[0] / 2, YC - STRAP[1] / 2, x + STRAP[0] / 2, YC + STRAP[1] / 2)
         ax = sorted((sx * (XC - A_TAB[0]), sx * (XC - A_TAB[1])))
-        s -= box(ax[0] - FIT / 2, H - FIT / 2, ax[1] + FIT / 2, H + T + FIT / 2)
-        s -= box(sx * (XC - 14) - 8 - FIT / 2, -T - FIT / 2, sx * (XC - 14) + 8 + FIT / 2, FIT / 2)
-        xs = sorted((sx * (XC - FIT / 2), sx * (XC + T + FIT / 2)))
-        s -= box(xs[0], YC - 10 - FIT / 2, xs[1], YC + 10 + FIT / 2)
-    s -= box(-6 - FIT / 2, H - FIT / 2, 6 + FIT / 2, H + T + FIT / 2)
+        s -= box(ax[0] - R_FIT / 2, H - R_FIT / 2, ax[1] + R_FIT / 2, H + T + R_FIT / 2)
+        bx = sorted((sx * (XC - B_TAB[0]), sx * (XC - B_TAB[1])))
+        s -= box(bx[0] - R_FIT / 2, -T - R_FIT / 2, bx[1] + R_FIT / 2, R_FIT / 2)
+        xs = sorted((sx * (XC - R_FIT / 2), sx * (XC + T + R_FIT / 2)))
+        s -= box(xs[0], YC - S_TAB - R_FIT / 2, xs[1], YC + S_TAB + R_FIT / 2)
+    s -= box(-A_MID - R_FIT / 2, H - R_FIT / 2, A_MID + R_FIT / 2, H + T + R_FIT / 2)
     s -= box(-STRAP[1] / 2, H + o + EAR / 2 - STRAP[0] / 2, STRAP[1] / 2, H + o + EAR / 2 + STRAP[0] / 2)
     name = ("R1" if layer == 0 else "R2") if V2 else "R"
     sub = ("back" if layer == 0 else "face") if V2 else "step 5"
@@ -204,7 +209,7 @@ def face_ring(layer=0):  # x centred; symmetric, so it has no left or right. v2:
     for a, b in folds:
         p.line("mountain", a, b)
     p.probe(f"{name} strap slot length", (XC + o + EAR / 2, YC - 20), (XC + o + EAR / 2, YC + 20), STRAP[1])
-    p.probe(f"{name} tab slot width (card T + fit)", (0, H - 2), (0, H + T + 2), T + FIT)
+    p.probe(f"{name} tab slot width (card T + fit)", (0, H - 2), (0, H + T + 2), T + R_FIT)
     return p
 
 
