@@ -53,24 +53,39 @@ for n, pg in enumerate(g["pages"], 1):
     print(f"page {n}: {write(f'headset-page{n}', PW, PH, cuts, scores)} (cuts, scores)")
 
 if v2:
-    # Everything v2 changes, on one sheet: R1, R2 / A, B + FH, SC + SU. No spacers (P, PL, K), nothing unchanged.
+    # Only the parts v2 changes (no spacers P, PL, K; nothing unchanged): one big sheet, and the same parts on
+    # US Letter pages for drivers that clip anything past a default page size.
     parts = {"R1": g["face_ring"](0), "R2": g["face_ring"](1), "A": g["top_wall"](), "B": g["bottom_wall"](),
              "FH": g["hook_doublers"](), "SC": g["side_wall"](False), "SU": g["side_wall"](True)}
+
+    def sheet(name, items, w=None, h=None, M=5.0):
+        """items: (part, rotation, left, top) with y down; printed side stays up."""
+        placed = []
+        for k, rot, left, top in items:
+            prt = parts[k]
+            r = lambda geom: affinity.rotate(affinity.scale(geom, 1, -1, origin=(0, 0)), rot, origin=(0, 0))
+            x0, y0, _, _ = r(prt.shape).bounds
+            f = lambda geom: affinity.translate(r(geom), left - x0, top - y0)
+            placed.append((f(prt.shape), [f(l) for kind, l in prt.lines if kind in ("mountain", "valley")]))
+        shapes = [s for s, _ in placed]
+        assert all(a.distance(b) >= 5 - 0.01 for i, a in enumerate(shapes) for b in shapes[i + 1:]), f"{name}: parts too close"
+        w = w or math.ceil(max(s.bounds[2] for s in shapes) + M)
+        h = h or math.ceil(max(s.bounds[3] for s in shapes) + M)
+        assert all(s.bounds[0] >= M - 0.01 and s.bounds[1] >= M - 0.01 and s.bounds[2] <= w - M + 0.01 and s.bounds[3] <= h - M + 0.01
+                   for s in shapes), f"{name}: part off the page"
+        cuts = [list(r.coords) for s in shapes for poly in getattr(s, "geoms", [s]) for r in [poly.exterior, *poly.interiors]]
+        scores = [list(l.coords) for _, ls in placed for l in ls]
+        print(f"{name} {w} x {h} mm: {write(name, w, h, cuts, scores)} (cuts, scores)")
+
     size = {k: (p.shape.bounds[2] - p.shape.bounds[0], p.shape.bounds[3] - p.shape.bounds[1]) for k, p in parts.items()}
     M = 5.0
     row2 = M + max(size["R1"][1], size["R2"][1]) + M
     xb, xs = M + size["A"][0] + M, 2 * M + size["A"][0] + size["B"][0] + M
-    pos = {"R1": (M, M), "R2": (2 * M + size["R1"][0], M), "A": (M, row2), "B": (xb, row2),
-           "FH": (xb, row2 + size["B"][1] + M), "SC": (xs, row2), "SU": (xs, row2 + size["SC"][1] + M)}
-    placed = {}
-    for k, p in parts.items():   # y down on the sheet, as on the pages (printed side up)
-        x0, _, _, y1 = p.shape.bounds
-        f = lambda geom, x0=x0, y1=y1, k=k: affinity.translate(affinity.scale(geom, 1, -1, origin=(0, 0)), pos[k][0] - x0, pos[k][1] + y1)
-        placed[k] = (f(p.shape), [f(l) for kind, l in p.lines if kind in ("mountain", "valley")])
-    shapes = [s for s, _ in placed.values()]
-    assert all(a.distance(b) >= M - 0.01 for i, a in enumerate(shapes) for b in shapes[i + 1:]), "parts too close on the sheet"
-    w = math.ceil(max(s.bounds[2] for s in shapes) + M)
-    h = math.ceil(max(s.bounds[3] for s in shapes) + M)
-    cuts = [list(r.coords) for s in shapes for poly in getattr(s, "geoms", [s]) for r in [poly.exterior, *poly.interiors]]
-    scores = [list(l.coords) for _, ls in placed.values() for l in ls]
-    print(f"sheet {w} x {h} mm: {write('headset-v2-recut-sheet', w, h, cuts, scores)} (cuts, scores)")
+    sheet("headset-v2-recut-sheet", [("R1", 0, M, M), ("R2", 0, 2 * M + size["R1"][0], M), ("A", 0, M, row2), ("B", 0, xb, row2),
+                                     ("FH", 0, xb, row2 + size["B"][1] + M), ("SC", 0, xs, row2), ("SU", 0, xs, row2 + size["SC"][1] + M)])
+    L = 10.0   # Letter margin: some print paths can't reach the paper's edge
+    sheet("headset-v2-recut-letter1-R1", [("R1", 90, L, L)], PW, PH, L)
+    sheet("headset-v2-recut-letter2-R2", [("R2", 90, L, L)], PW, PH, L)
+    sheet("headset-v2-recut-letter3-A-FH", [("A", 0, L, L), ("FH", 0, L, L + size["A"][1] + 5)], PW, PH, L)
+    sheet("headset-v2-recut-letter4-B-SC-SU", [("B", 0, L, L), ("SC", 0, L, L + size["B"][1] + 5),
+                                               ("SU", 0, L + size["SC"][0] + 5, L + size["B"][1] + 5)], PW, PH, L)
