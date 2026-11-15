@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from . import quat as Q
 
 SPECTATOR_PORT = 39602
+MONITOR_PORT = 39603   # the phone's low-res video of both eyes (JPEG in pieces)
 SAVE = os.path.expanduser("~/.myphonevision-tuner.json")   # calibration and sliders survive bridge restarts
 ZERO = {"yaw": 0.0, "pitch": 0.0, "roll": 0.0, "height": 0.0, "forward": 0.0, "side": 0.0}
 
@@ -46,7 +47,10 @@ button.big{background:#3a7bd5;font-size:16px;padding:10px 16px}button.scn{backgr
 <button onclick="post('/command',{cmd:1})">Recenter play area</button>
 <button onclick="post('/command',{cmd:2})">Reset score</button>
 </div>
-<div class="steps"><button class="scare" onclick="post('/command',{cmd:30})">JUMPSCARE</button></div>
+<div class="steps"><button class="scare" onclick="post('/command',{cmd:30})">JUMPSCARE</button>
+&nbsp; <b style="width:auto">Picture:</b>
+<button class="big" onclick="post('/command',{cmd:31})">Set upright (lock rotation)</button>
+<button onclick="post('/command',{cmd:32})">Flip 180°</button><button onclick="post('/command',{cmd:33})">Unlock rotation</button></div>
 <div class="steps"><b style="width:auto">Scene:</b>
 <button class="scn" onclick="post('/command',{cmd:10})">Neon grid</button><button class="scn" onclick="post('/command',{cmd:11})">Forest</button>
 <button class="scn" onclick="post('/command',{cmd:12})">Space</button><button class="scn" onclick="post('/command',{cmd:13})">Moon</button>
@@ -54,7 +58,9 @@ button.big{background:#3a7bd5;font-size:16px;padding:10px 16px}button.scn{backgr
 &nbsp; <b style="width:auto">Mode:</b>
 <button class="scn" onclick="post('/command',{cmd:20})">Sword game</button><button class="scn" onclick="post('/command',{cmd:21})">Explore (no cubes)</button>
 </div>
-<div class="row"><canvas id="view" width="1280" height="720"></canvas><div id="hands"></div></div>
+<div class="row"><div><img id="cam" style="width:960px;max-width:100%;aspect-ratio:2/1;background:#05060c;border-radius:10px;display:block;image-rendering:auto" alt="">
+<div class="stat" id="camstat">video: waiting for the phone</div>
+<canvas id="view" width="1280" height="720" style="margin-top:10px"></canvas></div><div id="hands"></div></div>
 <script>
 const names=["Left","Right"],colors=["#3b8cff","#ff5a2a"];
 const H=document.getElementById("hands");
@@ -100,9 +106,13 @@ for(const bl of s.blades){if(!bl.valid)continue;const q=seg(bl.a,bl.b);if(!q)con
  G.shadowBlur=0;G.strokeStyle="#fff";G.lineWidth=5;G.beginPath();G.moveTo(q[0][0],q[0][1]);G.lineTo(q[1][0],q[1][1]);G.stroke()}
 G.fillStyle="#9fe6ff";G.font="bold 44px system-ui";G.textAlign="center";if(s.mode_id==0)G.fillText(String(s.score),W/2,60);if(s.combo>1){G.font="24px system-ui";G.fillText("combo x"+s.combo,W/2,92)}}
 function noView(msg){G.fillStyle="#05060c";G.fillRect(0,0,V.width,V.height);G.fillStyle="#789";G.font="28px system-ui";G.textAlign="center";G.fillText(msg,V.width/2,V.height/2)}
+const cam=document.getElementById("cam");let camOk=false;
+function nextFrame(){const i=new Image();i.onload=()=>{cam.src=i.src;camOk=true;setTimeout(nextFrame,60)};i.onerror=()=>{camOk=false;setTimeout(nextFrame,500)};i.src="/frame.jpg?t="+Date.now()}
+nextFrame();
 let first=true;
 async function tick(){try{const s=await (await fetch("/state")).json();
 if(s.scene&&s.scene.age<1)drawScene(s.scene);else noView("Waiting for the phone (start the sword game)");
+document.getElementById("camstat").textContent=s.video&&s.video.age<2?`video from the phone (both eyes): ${s.video.fps} fps · below: drawn view`:"video: waiting for the phone";
 for(let h=0;h<2;h++){const d=s.hands[h];if(first){for(const k of KEYS){document.getElementById(k+h).value=s.offsets[h][k]||0;document.getElementById(k+"v"+h).textContent=(s.offsets[h][k]||0)}}
 if(!d||d.age>0.5){document.getElementById("stat"+h).textContent="no data (controller off?)";continue}
 const fw=d.forward;arrow(document.getElementById("top"+h),fw[0],fw[2],colors[h]);arrow(document.getElementById("side"+h),fw[2],-fw[1],colors[h]);
@@ -139,6 +149,9 @@ class Tuner:
         self.realign_until = 0.0
         self.scene: dict | None = None
         self.scene_t = 0.0
+        self.frame: bytes | None = None      # latest monitor JPEG from the phone
+        self.frame_t = 0.0
+        self.frame_times: list[float] = []
 
     def apply(self, hand: int, rot: Q.Quat) -> Q.Quat:
         """The controller's rotation with its calibration and slider offsets, in its own axes."""
@@ -217,7 +230,8 @@ class Tuner:
                 hands[h] = {"forward": d["forward"], "age": now - d["t"], "rate": d["rate"], "a": d["a"],
                             "calibrated": self.calibrated[h], "gyro": d["gyro"]}
             scene = dict(self.scene, age=now - self.scene_t) if self.scene else None
-            return {"hands": hands, "offsets": [self.offsets[0], self.offsets[1]], "scene": scene}
+            video = {"fps": len([t for t in self.frame_times if now - t < 1.0]), "age": now - self.frame_t if self.frame else 99}
+            return {"hands": hands, "offsets": [self.offsets[0], self.offsets[1]], "scene": scene, "video": video}
 
     # ---- the phone's game state, for the live view ----
     def _listen_spectator(self) -> None:
@@ -248,6 +262,29 @@ class Tuner:
             with self.lock:
                 self.scene, self.scene_t = scene, time.monotonic()
 
+    def _listen_monitor(self) -> None:
+        sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 20)
+        sock.bind(("::", MONITOR_PORT))
+        parts: dict[int, dict[int, bytes]] = {}
+        while True:
+            data, _ = sock.recvfrom(4096)
+            if len(data) < 12 or data[:4] != b"MPVJ":
+                continue
+            frame, idx, count = struct.unpack("<HHH", data[4:10])
+            got = parts.setdefault(frame, {})
+            got[idx] = data[12:]
+            if len(got) == count:
+                jpeg = b"".join(got[i] for i in range(count))
+                now = time.monotonic()
+                with self.lock:
+                    self.frame, self.frame_t = jpeg, now
+                    self.frame_times = [t for t in self.frame_times if now - t < 1.0] + [now]
+                parts = {f: v for f, v in parts.items() if (frame - f) % 65536 < 8 and f != frame}
+            elif len(parts) > 16:
+                parts = {f: v for f, v in parts.items() if (frame - f) % 65536 < 8}
+
     def serve(self, port: int = 8765) -> None:
         tuner = self
 
@@ -265,6 +302,14 @@ class Tuner:
             def do_GET(self) -> None:
                 if self.path.startswith("/state"):
                     self._send(json.dumps(tuner.state()).encode(), "application/json")
+                elif self.path.startswith("/frame.jpg"):
+                    with tuner.lock:
+                        jpeg = tuner.frame
+                    if jpeg:
+                        self._send(jpeg, "image/jpeg")
+                    else:
+                        self.send_response(204)
+                        self.end_headers()
                 else:
                     self._send(PAGE.encode(), "text/html; charset=utf-8")
 
@@ -287,7 +332,7 @@ class Tuner:
                     with tuner.lock:
                         tuner.base[hand], tuner.calibrated[hand] = Q.IDENTITY, False
                     tuner.save()
-                elif self.path.startswith("/command") and data.get("cmd") in (1, 2, 10, 11, 12, 13, 14, 15, 20, 21, 30):
+                elif self.path.startswith("/command") and data.get("cmd") in (1, 2, 10, 11, 12, 13, 14, 15, 20, 21, 30, 31, 32, 33):
                     with tuner.lock:
                         tuner.command_id = int(data["cmd"])
                         tuner.command_seq = (tuner.command_seq + 1) % 256
@@ -298,4 +343,5 @@ class Tuner:
         server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         threading.Thread(target=self._listen_spectator, daemon=True).start()
+        threading.Thread(target=self._listen_monitor, daemon=True).start()
         print(f"Tuner page: http://localhost:{port}")

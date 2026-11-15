@@ -280,6 +280,53 @@ final class Renderer {
     let saberGame = SaberGame()
     private var saberFrame = 0
     private var namedTextures: [String: MTLTexture] = [:]
+    private var monitorPipeline: MTLRenderPipelineState?
+    private var monitorTexture: MTLTexture?
+    private var monitorBusy = false
+    private let monitorQueue = DispatchQueue(label: "monitor", qos: .utility)
+
+    /// About 10 times a second, a 512 x 256 copy of both eyes goes to the admin page as a JPEG.
+    private func captureMonitor(commandBuffer: MTLCommandBuffer, eyes: MTLTexture) {
+        if monitorBusy { return }
+        if monitorPipeline == nil {
+            let d = MTLRenderPipelineDescriptor()
+            let lib = metalDevice.makeDefaultLibrary()
+            d.vertexFunction = lib?.makeFunction(name: "mapTexture")
+            d.fragmentFunction = lib?.makeFunction(name: "monitorCopy")
+            d.colorAttachments[0].pixelFormat = .bgra8Unorm_srgb
+            monitorPipeline = try? metalDevice.makeRenderPipelineState(descriptor: d)
+            let td = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm_srgb, width: 512, height: 256, mipmapped: false)
+            td.usage = [.renderTarget]
+            td.storageMode = .shared
+            monitorTexture = metalDevice.makeTexture(descriptor: td)
+        }
+        guard let pipeline = monitorPipeline, let tex = monitorTexture else { return }
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = tex
+        pass.colorAttachments[0].loadAction = .dontCare
+        pass.colorAttachments[0].storeAction = .store
+        guard let enc = commandBuffer.makeRenderCommandEncoder(descriptor: pass) else { return }
+        enc.setRenderPipelineState(pipeline)
+        enc.setFragmentTexture(eyes, index: 0)
+        enc.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
+        enc.endEncoding()
+        monitorBusy = true
+        commandBuffer.addCompletedHandler { [weak self] _ in
+            guard let self else { return }
+            var bytes = [UInt8](repeating: 0, count: 512 * 256 * 4)
+            tex.getBytes(&bytes, bytesPerRow: 512 * 4, from: MTLRegionMake2D(0, 0, 512, 256), mipmapLevel: 0)
+            self.monitorQueue.async {
+                defer { DispatchQueue.main.async { self.monitorBusy = false } }
+                let info = CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.noneSkipFirst.rawValue)
+                guard let provider = CGDataProvider(data: Data(bytes) as CFData),
+                      let cg = CGImage(width: 512, height: 256, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 512 * 4,
+                                       space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info, provider: provider,
+                                       decode: nil, shouldInterpolate: false, intent: .defaultIntent),
+                      let jpeg = UIImage(cgImage: cg).jpegData(compressionQuality: 0.45) else { return }
+                HandReceiver.shared.sendMonitor(jpeg)
+            }
+        }
+    }
     private var propsBuffer: MTLBuffer?
     private var propsVersion = -1
     /// 360 backgrounds by scene: 0 neon grid (none), 1 forest, 2 space, 3 Moon, 4 volcano, 5 study (the forest outside its window).
@@ -371,6 +418,9 @@ final class Renderer {
             }
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
             encoder.endEncoding()
+        }
+        if saberMode && saberFrame % 12 == 0, let eyes = testEyesTexture {   // ~10 fps monitor video
+            captureMonitor(commandBuffer: commandBuffer, eyes: eyes)
         }
         // Pass 2: the phone shows it through the lenses, reprojected to the current head.
         if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) {
@@ -822,6 +872,35 @@ final class HandReceiver {
         return commandBytes
     }
 
+    /// Sends one monitor JPEG to the bridge (UDP 39603) in pieces that each fit one network packet:
+    /// b"MPVJ", frame number, piece index, piece count (UInt16 each, little-endian), 2 pad bytes, data.
+    private var monitorFrame: UInt16 = 0
+    func sendMonitor(_ jpeg: Data) {
+        lock.lock()
+        guard haveSender, fd >= 0 else { lock.unlock(); return }
+        var to = sender
+        let sock = fd
+        monitorFrame &+= 1
+        let frame = monitorFrame
+        lock.unlock()
+        to.sin6_port = UInt16(39603).bigEndian
+        let chunk = 1180
+        let count = (jpeg.count + chunk - 1) / chunk
+        guard count > 0, count < 200 else { return }
+        for i in 0..<count {
+            var pkt: [UInt8] = [0x4D, 0x50, 0x56, 0x4A]
+            for v in [frame, UInt16(i), UInt16(count), 0] { pkt += [UInt8(v & 0xFF), UInt8(v >> 8)] }
+            pkt += jpeg[jpeg.startIndex + i * chunk ..< jpeg.startIndex + min(jpeg.count, (i + 1) * chunk)]
+            _ = pkt.withUnsafeBytes { b in
+                withUnsafePointer(to: &to) {
+                    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                        sendto(sock, b.baseAddress, b.count, 0, $0, socklen_t(MemoryLayout<sockaddr_in6>.size))
+                    }
+                }
+            }
+        }
+    }
+
     /// A hand's buttons: bit 0 A, bit 1 stick click, bit 2 realign (from the bridge's tuner page).
     func buttons(_ hand: Int) -> UInt8 {
         lock.lock(); defer { lock.unlock() }
@@ -921,6 +1000,9 @@ final class SaberGame {
             if cmd.id == 2 { score = 0; combo = 0 }        // reset score
             if (10...15).contains(cmd.id) { sceneId = Int(cmd.id) - 10 }   // switch scene
             if cmd.id == 30 { jumpscareAt = t; Jumpscare.play() }         // jumpscare
+            if cmd.id == 31 { OrientationLock.lockUprightNow() }           // the way the phone sits now is upright
+            if cmd.id == 32 { OrientationLock.flip() }                     // turn the picture 180°
+            if cmd.id == 33 { OrientationLock.unlock() }                   // automatic rotation again
             if (20...21).contains(cmd.id) {                                // switch mode
                 mode = Int(cmd.id) - 20
                 if mode == 0 { anchored = false } else { cubes.removeAll() }

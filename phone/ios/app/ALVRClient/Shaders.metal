@@ -793,3 +793,10 @@ fragment TestEyesOut vrSaberEyes(TextureMappingVertex in [[ stage_in ]],
     out.distance = distance;
     return out;
 }
+
+
+// ---- Monitor feed: a small copy of both eyes for the admin page's live video ---------
+fragment half4 monitorCopy(TextureMappingVertex in [[ stage_in ]], texture2d<float> eyes [[ texture(0) ]]) {
+    constexpr sampler s(filter::linear, address::clamp_to_edge);
+    return half4(eyes.sample(s, in.textureCoordinate));
+}
