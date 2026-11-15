@@ -48,6 +48,9 @@
 #define GYRO_CAL_MS 2000       // hold still this long after power-on
 #define MAHONY_KP 1.0f         // accel correction gain; raise if tilt drifts
 #define MAHONY_KI 0.0f
+#define GYRO_STILL 0.015f      // rad/s (~0.9 deg/s): below this on every axis counts as resting
+#define GYRO_STILL_MS 1000     // rest this long before the gyro bias starts tracking
+#define GYRO_TRACK_S 5.0f      // bias follows the resting reading with this time constant
 
 // --- UDP fallback (MPV_TRANSPORT_UDP=1) -----------------------------------
 #define UDP_SSID "myphonevision"      // the PC's Mobile Hotspot

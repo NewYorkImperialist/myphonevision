@@ -166,6 +166,22 @@ static void calibrateGyro() {
   }
 }
 
+// Yaw drift is mostly gyro bias creeping as the board warms up. Whenever the
+// controller rests for GYRO_STILL_MS, ease the bias toward the resting reading.
+static void trackGyroBias(const float g[3], float dt) {
+  static uint32_t stillSinceMs = 0;
+  bool still = gyroCalibrated;
+  for (int i = 0; i < 3; i++) still = still && fabsf(g[i] - gyroBias[i]) < GYRO_STILL;
+  if (!still) {
+    stillSinceMs = 0;
+    return;
+  }
+  if (!stillSinceMs) stillSinceMs = millis() | 1;
+  if (millis() - stillSinceMs < GYRO_STILL_MS) return;
+  float k = dt / GYRO_TRACK_S;
+  for (int i = 0; i < 3; i++) gyroBias[i] += k * (g[i] - gyroBias[i]);
+}
+
 static int16_t readStickAxis(int pin, int center, bool invert) {
   // Scale each side of the measured center separately, so an off-center
   // resting reading (typical on the ESP32 ADC) still maps to 0.
@@ -262,9 +278,11 @@ void loop() {
     uint32_t now = micros();
     float dt = (now - lastImuUs) * 1e-6f;
     lastImuUs = now;
-    if (dt > 0 && dt < 0.1f)
+    if (dt > 0 && dt < 0.1f) {
+      trackGyroBias(g, dt);
       filter.update(g[0] - gyroBias[0], g[1] - gyroBias[1], g[2] - gyroBias[2],
                     a[0], a[1], a[2], dt);
+    }
   }
 
   uint32_t now = micros();
