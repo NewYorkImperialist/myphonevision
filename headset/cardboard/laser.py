@@ -53,8 +53,7 @@ for n, pg in enumerate(g["pages"], 1):
     print(f"page {n}: {write(f'headset-page{n}', PW, PH, cuts, scores)} (cuts, scores)")
 
 if v2:
-    # Only the parts v2 changes (no spacers P, PL, K; nothing unchanged): one big sheet, and the same parts on
-    # US Letter pages for drivers that clip anything past a default page size.
+    # Only the parts v2 changes (no spacers P, PL, K; nothing unchanged), on two sheets.
     parts = {"R1": g["face_ring"](0), "R2": g["face_ring"](1), "A": g["top_wall"](), "B": g["bottom_wall"](),
              "FH": g["hook_doublers"](), "SC": g["side_wall"](False), "SU": g["side_wall"](True)}
 
@@ -79,13 +78,8 @@ if v2:
 
     size = {k: (p.shape.bounds[2] - p.shape.bounds[0], p.shape.bounds[3] - p.shape.bounds[1]) for k, p in parts.items()}
     M = 5.0
-    row2 = M + max(size["R1"][1], size["R2"][1]) + M
-    xb, xs = M + size["A"][0] + M, 2 * M + size["A"][0] + size["B"][0] + M
-    sheet("headset-v2-recut-sheet", [("R1", 0, M, M), ("R2", 0, 2 * M + size["R1"][0], M), ("A", 0, M, row2), ("B", 0, xb, row2),
-                                     ("FH", 0, xb, row2 + size["B"][1] + M), ("SC", 0, xs, row2), ("SU", 0, xs, row2 + size["SC"][1] + M)])
-    L = 10.0   # Letter margin: some print paths can't reach the paper's edge
-    sheet("headset-v2-recut-letter1-R1", [("R1", 90, L, L)], PW, PH, L)
-    sheet("headset-v2-recut-letter2-R2", [("R2", 90, L, L)], PW, PH, L)
-    sheet("headset-v2-recut-letter3-A-FH", [("A", 0, L, L), ("FH", 0, L, L + size["A"][1] + 5)], PW, PH, L)
-    sheet("headset-v2-recut-letter4-B-SC-SU", [("B", 0, L, L), ("SC", 0, L, L + size["B"][1] + 5),
-                                               ("SU", 0, L + size["SC"][0] + 5, L + size["B"][1] + 5)], PW, PH, L)
+    sheet("headset-v2-recut-1-R1-R2", [("R1", 0, M, M), ("R2", 0, M, 2 * M + size["R1"][1])])
+    xr = 2 * M + size["A"][0]
+    sheet("headset-v2-recut-2-A-B-SC-SU-FH", [("A", 0, M, M), ("B", 0, M, 2 * M + size["A"][1]),
+                                              ("SC", 0, xr, M), ("SU", 0, xr, 2 * M + size["SC"][1]),
+                                              ("FH", 0, xr, 3 * M + 2 * size["SC"][1])])
