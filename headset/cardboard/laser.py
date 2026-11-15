@@ -86,6 +86,7 @@ if v2:
                                              ("SU", 0, L + size["SC"][0] + 5, L + size["B"][1] + 5)]}
     for name, items in sheets.items():
         sheet(name, items, PW, PH, L)
+    sheet("little-tabs", [("FH", 0, L, L)], PW, PH, L)   # FH x4 alone, for re-cutting lost ones
     # The same parts on one sheet, exactly 19 x 14 in so the Epilog's Piece Size can be typed in whole inches.
     M = 5.0
     row2 = M + max(size["R1"][1], size["R2"][1]) + M
