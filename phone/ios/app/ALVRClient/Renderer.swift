@@ -316,13 +316,13 @@ final class Renderer {
             var bytes = [UInt8](repeating: 0, count: 512 * 256 * 4)
             tex.getBytes(&bytes, bytesPerRow: 512 * 4, from: MTLRegionMake2D(0, 0, 512, 256), mipmapLevel: 0)
             self.monitorQueue.async {
-                defer { DispatchQueue.main.async { self.monitorBusy = false } }
+                defer { self.monitorBusy = false }
                 let info = CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.noneSkipFirst.rawValue)
                 guard let provider = CGDataProvider(data: Data(bytes) as CFData),
                       let cg = CGImage(width: 512, height: 256, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 512 * 4,
                                        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: info, provider: provider,
                                        decode: nil, shouldInterpolate: false, intent: .defaultIntent),
-                      let jpeg = UIImage(cgImage: cg).jpegData(compressionQuality: 0.45) else { return }
+                      let jpeg = UIImage(cgImage: cg).jpegData(compressionQuality: 0.3) else { return }
                 HandReceiver.shared.sendMonitor(jpeg)
             }
         }
@@ -419,7 +419,7 @@ final class Renderer {
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
             encoder.endEncoding()
         }
-        if saberMode && saberFrame % 12 == 0, let eyes = testEyesTexture {   // ~10 fps monitor video
+        if saberMode && saberFrame % 4 == 0, let eyes = testEyesTexture {    // monitor video, as fast as the encoder keeps up
             captureMonitor(commandBuffer: commandBuffer, eyes: eyes)
         }
         // Pass 2: the phone shows it through the lenses, reprojected to the current head.
