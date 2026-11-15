@@ -30,8 +30,9 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--t", type=float, default=3.0, help="card thickness, mm")
 ap.add_argument("--d-max", type=float, default=32.0, help="longest rear-lens-face-to-screen distance, mm")
 ap.add_argument("--d-min", type=float, default=24.0)
+ap.add_argument("--v2", action="store_true", help="double face ring (R1 + R2) with wrap tabs, long body tabs, hook doublers; writes v2/")
 args = ap.parse_args()
-T, D_MAX, D_MIN = args.t, args.d_max, args.d_min
+T, D_MAX, D_MIN, V2 = args.t, args.d_max, args.d_min, args.v2
 
 # ---- Measured / spec (same as slot_headset.scad) ----------------------------
 PHONE_W, PHONE_H, PHONE_T = 149.6, 71.5, 8.95
@@ -67,7 +68,11 @@ NOSE_W, NOSE_TOP = 38.0, 34.0                    # nose arch: width, top above t
 HOOKS = (XC - 12, XC + 48)                       # band hooks, clear of the camera
 XCUT = M + CAM_END + 1.5                         # back flap starts here
 LIP = 8.0
-EAR = 16.0
+EAR = 22.0 if V2 else 16.0                       # strap ear depth; v2 leaves 9 mm of card outside the slot
+EAR_L = 25.0 if V2 else 21.0                     # half the side ears' length
+TAB = 2 * T + 8 if V2 else T                     # body tabs: through R (two layers in v2) plus 8 mm to fold and tape
+A_TAB = (2.0, 14.0) if V2 else (6.0, 22.0)       # A's end tabs; v2 moves them out to make room for R's top wrap tabs
+WRAP = 25.0                                      # v2: R's wrap tabs, folded back along the body
 STRAP = (4.0, 32.0)                              # issue #9
 LENS_X = (-IPD / 2, IPD / 2)
 
@@ -107,8 +112,8 @@ class Part:
 # ---- Parts -------------------------------------------------------------------
 def top_wall():          # seen from above: right = +x, up = front
     flap_h = H + T + LIP
-    s = unary_union([box(-T, -DEPTH, W + T, 0), box(XC - 6, 0, XC + 6, T),
-                     box(6, 0, 22, T), box(W - 22, 0, W - 6, T),
+    s = unary_union([box(-T, -DEPTH, W + T, 0), box(XC - 6, 0, XC + 6, TAB),
+                     box(A_TAB[0], 0, A_TAB[1], TAB), box(W - A_TAB[1], 0, W - A_TAB[0], TAB),
                      box(XCUT, -DEPTH - flap_h, W + T, -DEPTH)])
     for lx in LENS_X:
         s -= box(XC + lx - SLOT_W / 2, -ZN, XC + lx + SLOT_W / 2, T + 1)
@@ -131,7 +136,7 @@ def top_wall():          # seen from above: right = +x, up = front
 
 
 def bottom_wall():       # seen from below: right = +x, up = back
-    s = unary_union([box(-T, 0, W + T, DEPTH), box(6, -T, 22, 0), box(W - 22, -T, W - 6, 0)])
+    s = unary_union([box(-T, 0, W + T, DEPTH), box(6, -TAB, 22, 0), box(W - 22, -TAB, W - 6, 0)])
     s -= at(nose(30), XC, 0)
     for hx in HOOKS:
         s -= box(hx - 7 - FIT / 2, ZS - T - FIT / 2, hx + 7 + FIT / 2, ZS + FIT / 2)
@@ -141,7 +146,7 @@ def bottom_wall():       # seen from below: right = +x, up = back
 
 
 def side_wall(usb):      # seen from outside; cam: right = back, usb: right = front
-    s = unary_union([box(0, 0, DEPTH, H), box(-T, YC - 10, 0, YC + 10)])
+    s = unary_union([box(0, 0, DEPTH, H), box(-TAB, YC - 10, 0, YC + 10)])
     s -= box(ZS - T - FIT / 2, YC - 10 - FIT / 2, ZS + FIT / 2, YC + 10 + FIT / 2)
     if usb:
         s -= box(ZS + 0.5 - 1, YC - USB_W / 2, DEPTH + 1, YC + USB_W / 2)
@@ -155,26 +160,63 @@ def side_wall(usb):      # seen from outside; cam: right = back, usb: right = fr
     return p
 
 
-def face_ring():         # x centred; symmetric, so it has no left or right
+def face_ring(layer=0):  # x centred; symmetric, so it has no left or right. v2: layer 0 = R1 (back), 1 = R2 (face)
     o = T + 6
     s = unary_union([box(-XC - o + 6, -o + 6, XC + o - 6, H + o - 6).buffer(6),
-                     box(-XC - o - EAR, YC - 21, XC + o + EAR, YC + 21),
-                     box(-21, H + o - 1, 21, H + o + EAR)])
+                     box(-XC - o - EAR, YC - EAR_L, XC + o + EAR, YC + EAR_L),
+                     box(-EAR_L, H + o - 1, EAR_L, H + o + EAR)])
     s -= box(-XC + 12, 12, XC - 12, H - 12).buffer(6)
     s -= at(nose(NOSE_TOP + o), 0, -o)
+    folds = []
+    if V2:
+        # Wrap tabs fold back over the body's outside. R2's fold sits one card further out, so it wraps around R1's tab.
+        hinge = T * (1 + layer)
+        a_slot = XC - A_TAB[1] - FIT / 2                         # inner edge of the slot for A's end tab
+        spans = []
+        for sx in (-1, 1):
+            spans.append(("y", H + hinge, 1, sorted((sx * (IPD / 2 + SLOT_W / 2 + 1.5), sx * (a_slot - 4)))))   # top, clear of the magnifier notches
+            spans.append(("y", -hinge, -1, sorted((sx * (NOSE_W / 2 + 3), sx * (XC - 22 - FIT / 2 - 4)))))   # bottom, clear of the nose
+            for y0, y1 in ((4, YC - EAR_L - 1.5), (YC + EAR_L + 1.5, H - 4)):                                 # sides, clear of the ears
+                spans.append(("x", sx * (XC + hinge), sx, (y0, y1)))
+        for axis, c, d, (u0, u1) in spans:     # 4 mm from a slot leaves ~3 mm of card beside the slit's end
+            assert u1 - u0 >= 10, "wrap tab under 10 mm wide"
+            flap = box(u0, c, u1, c + d * WRAP) if axis == "y" else box(c, u0, c + d * WRAP, u1)
+            s = s.union(flap)
+            reach = sorted((c, c + d * (o - hinge + 2)))          # slits beside the tab, from the fold out past the rim
+            for u in (u0 - 0.6, u1):
+                s -= box(u, *reach[:1], u + 0.6, reach[1]) if axis == "y" else box(reach[0], u, reach[1], u + 0.6)
+                s -= Point((u + 0.3, c) if axis == "y" else (c, u + 0.3)).buffer(0.8, 12)   # round end so the fold can't tear on
+            folds.append(((u0, c), (u1, c)) if axis == "y" else ((c, u0), (c, u1)))
     for sx in (-1, 1):
         x = sx * (XC + o + EAR / 2)
         s -= box(x - STRAP[0] / 2, YC - STRAP[1] / 2, x + STRAP[0] / 2, YC + STRAP[1] / 2)
-        s -= box(sx * (XC - 14) - 8 - FIT / 2, H - FIT / 2, sx * (XC - 14) + 8 + FIT / 2, H + T + FIT / 2)
+        ax = sorted((sx * (XC - A_TAB[0]), sx * (XC - A_TAB[1])))
+        s -= box(ax[0] - FIT / 2, H - FIT / 2, ax[1] + FIT / 2, H + T + FIT / 2)
         s -= box(sx * (XC - 14) - 8 - FIT / 2, -T - FIT / 2, sx * (XC - 14) + 8 + FIT / 2, FIT / 2)
         xs = sorted((sx * (XC - FIT / 2), sx * (XC + T + FIT / 2)))
         s -= box(xs[0], YC - 10 - FIT / 2, xs[1], YC + 10 + FIT / 2)
     s -= box(-6 - FIT / 2, H - FIT / 2, 6 + FIT / 2, H + T + FIT / 2)
     s -= box(-STRAP[1] / 2, H + o + EAR / 2 - STRAP[0] / 2, STRAP[1] / 2, H + o + EAR / 2 + STRAP[0] / 2)
-    p = Part(s, "R", 35, H + 1.5, "step 5")
+    name = ("R1" if layer == 0 else "R2") if V2 else "R"
+    sub = ("back" if layer == 0 else "face") if V2 else "step 5"
+    p = Part(s, name, 35, H + 1.5, sub)
     p.text(-35, H + 1.5, "TOP")
-    p.probe("R strap slot length", (XC + o + EAR / 2, YC - 20), (XC + o + EAR / 2, YC + 20), STRAP[1])
-    p.probe("R tab slot width (card T + fit)", (XC - 14, H - 2), (XC - 14, H + T + 2), T + FIT)
+    for a, b in folds:
+        p.line("mountain", a, b)
+    p.probe(f"{name} strap slot length", (XC + o + EAR / 2, YC - 20), (XC + o + EAR / 2, YC + 20), STRAP[1])
+    p.probe(f"{name} tab slot width (card T + fit)", (0, H - 2), (0, H + T + 2), T + FIT)
+    return p
+
+
+def hook_doublers():     # v2: glued on the part of each F hook that sticks out past A or B, so the band pulls on two layers
+    pieces = []
+    for i in range(4):
+        x = i * 18
+        piece = box(x, 0, x + 14, 9.5)
+        for xs in ((x - 1, x + 2.5), (x + 11.5, x + 15)):
+            piece -= box(xs[0], 1.0, xs[1], 4.5)
+        pieces.append(piece)
+    p = Part(unary_union(pieces), "FH", -9, 4.75, "x4")
     return p
 
 
@@ -315,21 +357,27 @@ TOP, LEFT = PH - MARGIN, MARGIN
 pg = new_page()
 put(pg, top_wall(), LEFT + 11, TOP)
 rows = math.ceil(N_BLOCKS / 8)
-put(pg, grid(BTN_FREE, 10, 8, rows, "P", f"x{N_BLOCKS}  step 6"), LEFT + 24, 90)
-put(pg, grid(30, 10, LAYERS - 1, 1, "PL", f"x{LAYERS - 1}"), LEFT + 24, 82 - rows * 10)
+put(pg, grid(BTN_FREE, 10, 8, rows, "P", f"x{N_BLOCKS}  step 6"), LEFT + 24, 90 - (TAB - T))
+put(pg, grid(30, 10, LAYERS - 1, 1, "PL", f"x{LAYERS - 1}"), LEFT + 24, 82 - rows * 10 - (TAB - T))
 pg = new_page()
 put(pg, bottom_wall(), LEFT + 11, TOP)
-put(pg, side_wall(False), LEFT + 14, TOP - DEPTH - T - 6)
-put(pg, side_wall(True), LEFT + 104, TOP - DEPTH - T - 6)
-put(pg, grid(55, 24, 2, 2, "K", "x4  step 7"), LEFT + 30, TOP - DEPTH - T - H - 12)
-put(new_page(), face_ring(), LEFT + 30, TOP, 90)
+put(pg, side_wall(False), LEFT + 14, TOP - DEPTH - TAB - 6)
+put(pg, side_wall(True), LEFT + 104, TOP - DEPTH - TAB - 6)
+put(pg, grid(55, 24, 2, 2, "K", "x4  step 7"), LEFT + 30, TOP - DEPTH - TAB - H - 12)
+if V2:
+    put(pg, hook_doublers(), LEFT + 30, 34)
+    put(new_page(), face_ring(0), LEFT + 2, TOP, 90)
+    put(new_page(), face_ring(1), LEFT + 2, TOP, 90)
+else:
+    put(new_page(), face_ring(), LEFT + 30, TOP, 90)
 put(new_page(), screen_frame(), LEFT + 30, TOP, 90)
 put(new_page(), carrier(), LEFT + (PW - 2 * MARGIN - 2 * HP - GAP) / 2, TOP, 90)
 pg = new_page()
 put(pg, seat(), LEFT + 18, TOP)
 put(pg, seat(), LEFT + 18, TOP - HP - 8)
 
-here = Path(__file__).parent
+here = Path(__file__).parent / ("v2" if V2 else "")
+here.mkdir(exist_ok=True)
 (here / "pages").mkdir(exist_ok=True)
 (here / "preview").mkdir(exist_ok=True)
 N = len(pages)
@@ -443,7 +491,8 @@ def overview():
     subprocess.run(["rsvg-convert", "-z", "2.5", "-o", str(here / "overview.png"), str(here / "overview.svg")], check=True)
 
 
-overview()
+if not V2:   # the overview still draws v1
+    overview()
 
 # ---- Self-check: measure the written template.svg ----------------------------
 svg = (here / "template.svg").read_text()
