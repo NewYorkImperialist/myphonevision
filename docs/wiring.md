@@ -81,6 +81,8 @@ Each button goes between its pin and GND. The firmware turns on the internal pul
 
 ### 2e. Vibration motor
 
+**Dropped on the as-built controllers (2026-11-15), to make room in the case.** Skip this step; GPIO 23 stays unconnected and the firmware doesn't mind.
+
 ```
                  5V
                   │
@@ -108,7 +110,7 @@ GPIO 23 ── 1 kΩ ── B   NPN
 
 The diode stops USB power from back-feeding the batteries. **Unplug the batteries while the board is on USB,** to be safe.
 
-**Test:** unplug USB. The controller should buzz on power-up, and the bridge's `--debug` view should show it at about 200 Hz.
+**Test:** unplug USB. The controller should buzz on power-up (if it has a motor), and the bridge's `--debug` view should show it at about 200 Hz.
 
 ### 2g. Into the case
 
@@ -122,10 +124,10 @@ Build guide for **case D** (the pistol grip, `cases/mockups/controller/d_ergo.sc
 4. **Joystick into the head.** Pin header toward the **wrist** (the back of the head; `STICK_INVERT_Y 0` assumes this). Its plugs hang straight down into the top of the grip. Screw it to the four ribs with the **4 × M3×8**. The knob sticks up through the round hole.
 5. **A button** through the hole in front of the joystick, ring on the outside, nut on the inside.
 6. **FSR (grip)** into the round pocket on the front of the grip, under your fingers, pad facing out. Its tail goes through the slit next to the pocket into the grip, past the IMU's plugs. A strip of tape holds the pad flat in the pocket.
-7. **Vibration motor and antenna.** The case has no spot for either. Tape the motor to the inside wall of the head, where your hand will feel it. Run the antenna along the inside wall of the head or arm, away from the battery and the ESP32's metal can.
+7. **Antenna.** The case has no spot for it (there's no vibration motor; it was dropped for space). Run the antenna along the inside wall of the head or arm, away from the battery and the ESP32's metal can.
 8. **Battery holder into the `cradle`.** It snaps in under the two lips, cells facing out. Lay its leads in the channels behind it and out through the exits at the top or bottom. Then slide the cradle's rails into the notches in the arm and the bow of `half_l`. The cradle is clamped by both halves, so it goes in **before** closing.
 9. **Route and tie the wires.** Everything crossing between the ESP32 and the joystick or IMU goes through the window in the divider wall. Zip-tie bundles to the anchors in the head, the arm and the grip, so no wire sits on the split line or in a screw hole. Trim the tie tails.
-10. **Test before closing.** Batteries in, keep it still until it buzzes, then run `python -m myphonevision_bridge --no-hmd --debug` and check the stick, A, grip and tilt.
+10. **Test before closing.** Batteries in, keep it still for 3 s while the gyro calibrates, then run `python -m myphonevision_bridge --no-hmd --debug` and check the stick, A, grip and tilt.
 11. **Close it.** Put `half_r` on, checking that no wire is pinched along the edge. Fasten with the **4 × M3×12**. If it won't close flat, a wire or plug is in the way: open it and re-route, don't force it.
 12. **Cover on.** Slide the `cover` across the cells from the side. Cells swap without opening the case.
 
@@ -144,7 +146,7 @@ Both controllers are wired and tested (wireless on batteries: LEFT ~195 Hz, RIGH
 | FSR **grip** (grab, not trigger) | pad 18.5, tail 7.3 wide | GPIO 32 + 10 kΩ to GND |
 | IMU, LEFT | GY-521 | Flat, chip up |
 | IMU, RIGHT | **Adafruit BNO055**, 25.35 × 20.3 | Flat, chip up, turned the same way as LEFT's GY-521 (one `--mount` serves both hands). Firmware detects it |
-| Vibration motor | not measured | GPIO 23 through the NPN; tape or glue it in |
+| ~~Vibration motor~~ | | **Dropped (2026-11-15) to make room.** Take out the motor, NPN, 1 kΩ and diode; GPIO 23 stays unconnected |
 | 4×AA holder | 61.68 × 57.7 × 15 | Through a 1N5819 to 5V, **stripe toward the board** (backwards = no power, the first-try mistake on LEFT) |
 
 All 3V3 parts (IMU, joystick, FSR) chain off the IMU's VCC pin.

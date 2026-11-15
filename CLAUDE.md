@@ -47,7 +47,7 @@ Four people. Three are in Amherst; Jayden arrives about 12 hours in and takes co
 4. Print one file at a time, the part's fit test first (`tools/upload-print.sh FILE` gives the makerspace pickup code).
 
 ### Third person: parts and bring-up
-**Status (ygrfhf):** both controllers wired and tested, running wirelessly on 4×AA through the hub (LEFT ~195 Hz, RIGHT ~148 Hz). Each has IMU, joystick, A button, FSR grip (RIGHT's needs replacing; the bridge sends it as grip, there is no trigger), vibration and antenna. LEFT has a GY-521, RIGHT an Adafruit BNO055. Grip, B and system buttons dropped. What goes in the shells, with sizes: [docs/wiring.md](docs/wiring.md) step 2h.
+**Status (ygrfhf):** both controllers wired and tested, running wirelessly on 4×AA through the hub (LEFT ~195 Hz, RIGHT ~148 Hz). Each has IMU, joystick, A button, FSR grip (RIGHT's needs replacing; the bridge sends it as grip, there is no trigger), antenna (vibration dropped 2026-11-15 to make room in the case). LEFT has a GY-521, RIGHT an Adafruit BNO055. Grip, B and system buttons dropped. What goes in the shells, with sizes: [docs/wiring.md](docs/wiring.md) step 2h.
 1. Check out parts at the hardware desk, P0 first (ESP32 boards, GY-521 / motion sensors). Ask whether you can take Jayden's share (the limit is one of each item per attendee).
 2. Ask the desk: which chip is the "Accelerometer/Gyroscopic Sensor"? Are there 2.4 GHz U.FL antennas? Is the limit per item or per pack?
 3. Measure the lab's 4×AA battery holder, joystick board (and its screw-hole spacing) and push buttons; send the numbers to industrial design.
