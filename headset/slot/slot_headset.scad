@@ -20,7 +20,7 @@
 part = "assembly";
 
 // ---- Magnifier stand-in: Carson TriView TV-36 ------------------------------
-// [manual] = printed in TV-36_guide_EN.pdf. [measured] = calipers on the real part. [UNMEASURED] = placeholder read off
+// [manual] = printed in docs/TV-36_guide_EN.pdf. [measured] = calipers on the real part. [UNMEASURED] = placeholder read off
 // the manual's pictures; measure with calipers (or trace the outline) and pass
 // with -D before printing anything but fit_test.
 mag_glass_d  = 30.0;    // [manual] lens diameter
