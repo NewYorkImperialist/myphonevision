@@ -1,7 +1,7 @@
 """Laser files from gen.py: cut and score lines only (no labels, no guides).
 
-    python3 laser.py [--v2]      # writes laser/ (or v2/laser/): one .svg, .dxf and .pdf per page
-                                 # --v2 also writes headset-v2-recut-sheet.svg/.pdf: every part v2 changes, on one sheet
+    python3 laser.py [--v2]      # writes laser/ (or v2/laser/): one .svg and .dxf per page (no PDFs)
+                                 # --v2 also writes the recut sheets: every part v2 changes, without spacers
 
 Makerspace convention: 0.01 mm strokes are cut, anything wider is engraved. Red 0.01 mm = cut through;
 blue 0.5 mm = fold lines, engraved at low power so they score the top liner.
@@ -41,7 +41,6 @@ def write(name, w, h, cuts, scores):
     f = os.path.join(out, name)
     open(f + ".svg", "w").write("\n".join(svg))
     open(f + ".dxf", "w").write("\n".join(dxf) + "\n")
-    subprocess.run(["rsvg-convert", "-f", "pdf", "-o", f + ".pdf", f + ".svg"], check=True)
     return len(cuts), len(scores)
 
 
@@ -56,7 +55,7 @@ for n, pg in enumerate(g["pages"], 1):
 if v2:
     # Only the parts v2 changes (no spacers P, PL, K; nothing unchanged), on US Letter pages.
     parts = {"R1": g["face_ring"](0), "R2": g["face_ring"](1), "A": g["top_wall"](), "B": g["bottom_wall"](),
-             "FH": g["hook_doublers"](), "SC": g["side_wall"](False), "SU": g["side_wall"](True)}
+             "FH": g["hook_doublers"](), "SC": g["side_wall"](False), "SU": g["side_wall"](True), "F": g["screen_frame"]()}
 
     def sheet(name, items, w=None, h=None, M=5.0):
         """items: (part, rotation, left, top) with y down; printed side stays up."""
@@ -87,6 +86,7 @@ if v2:
     for name, items in sheets.items():
         sheet(name, items, PW, PH, L)
     sheet("little-tabs", [("FH", 0, L, L)], PW, PH, L)   # FH x4 alone, for re-cutting lost ones
+    sheet("F-and-little-tabs", [("F", 90, L, L), ("FH", 0, L + size["F"][1] + 5, L)], PW, PH, L)
     # The same parts on one sheet, exactly 19 x 14 in so the Epilog's Piece Size can be typed in whole inches.
     M = 5.0
     row2 = M + max(size["R1"][1], size["R2"][1]) + M
@@ -94,5 +94,3 @@ if v2:
     sheet("headset-v2-recut-sheet-19x14in", [("R1", 0, M, M), ("R2", 0, 2 * M + size["R1"][0], M), ("A", 0, M, row2), ("B", 0, xb, row2),
                                              ("FH", 0, xb, row2 + size["B"][1] + M), ("SC", 0, xs, row2), ("SU", 0, xs, row2 + size["SC"][1] + M)],
           19 * 25.4, 14 * 25.4, M)
-    subprocess.run(["rsvg-convert", "-f", "pdf", "-o", os.path.join(out, "headset-v2-recut-all-4-pages.pdf"),
-                    *[os.path.join(out, n + ".svg") for n in sheets]], check=True)
