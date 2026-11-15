@@ -334,7 +334,7 @@ final class Renderer {
                 let scene = saberGame.scene()
                 scene.withUnsafeBytes { encoder.setFragmentBytes($0.baseAddress!, length: $0.count, index: 2) }
                 saberFrame += 1
-                if saberFrame % 4 == 0 { HandReceiver.shared.sendSpectator(head: renderedHead, scene: scene) }   // ~30 Hz live view
+                if saberFrame % 2 == 0 { HandReceiver.shared.sendSpectator(head: renderedHead, scene: scene) }   // 30-60 Hz live view
             }
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
             encoder.endEncoding()
@@ -763,12 +763,13 @@ final class HandReceiver {
         let sock = fd
         lock.unlock()
         to.sin6_port = UInt16(39602).bigEndian
-        let boxes = Int(scene[6].x)
+        let boxes = min(Int(scene[6].x), 10)   // stay under one network packet (no fragments to lose)
         let used = min(scene.count, 19 + boxes * 5)
         var floats: [Float] = [head.columns.3.x, head.columns.3.y, head.columns.3.z,
                                -head.columns.2.x, -head.columns.2.y, -head.columns.2.z,
                                head.columns.1.x, head.columns.1.y, head.columns.1.z]
         for v in scene[0..<used] { floats += [v.x, v.y, v.z, v.w] }
+        floats[9 + 6 * 4] = Float(boxes)
         var bytes: [UInt8] = [0x4D, 0x50, 0x56, 0x53]
         floats.withUnsafeBytes { bytes += $0 }
         _ = bytes.withUnsafeBytes { b in
