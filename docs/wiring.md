@@ -112,9 +112,24 @@ The diode stops USB power from back-feeding the batteries. **Unplug the batterie
 
 ### 2g. Into the case
 
-Print the controller fit tests first (`cases/fit_tests.scad`). Then the joystick screws to the head's posts, the buttons go through the head's top holes, the FSR sits in the handle's front pocket, and the GY-521 is foam-taped **flat** to the head's underside. If it can wiggle, the controller jitters in VR. The DevKitC goes in the handle with its USB end down.
+Build guide for **case D** (the pistol grip, `cases/mockups/controller/d_ergo.scad`; print files and screws in issue #12, pickup code 2DUQ). Written from the design file and renders before the first build: fix any step that turns out wrong. The pictures: `cases/mockups/controller/img/d_ergo-cutaway.png` (everything in place), `d_ergo-inside_l.png` and `d_ergo-inside_r.png` (the empty halves).
 
-After assembly, check which way the GY-521 faces and pick the bridge's `--mount` preset (`firmware/controller/README.md`).
+**Per controller:** plate A (`half_l`, `imu_clamp`, `cover`) and plate B (`half_r`, `cradle`), 4 × M3×12, 4 × M3×8, 1 × M3×6 (no countersunk heads), about 7 zip ties 2.5 mm wide, electrical tape. The wiring must already pass the tests in 2a–2f: it's hard to fix once it's closed.
+
+1. **Prep the prints.** Peel off any brim. Run each screw into its hole once and back out, so the threads are cut before parts are in the way. Snug only, every screw: the threads are printed plastic.
+2. **ESP32 into `half_l`.** Lay `half_l` cheek down, open side up. The ESP32 lies flat on the ledges between the two rails, plugs pointing up out of the half, **USB end toward the bottom of the grip**. Slide the top end under the wedge stop first, then press the USB end down until the two hooks click. The USB port should line up with the slot in the heel, so you can still plug in a cable to reflash.
+3. **IMU onto its pad** (above the ESP32, on the same cheek). Chip up, header edge (with the plugs) toward the **front** of the grip. Push it into the corner the two fences make; the wire on the VCC pin goes through the notch at that corner. Put the `imu_clamp` over it and fasten with the **M3×6**. It must not wiggle at all, or the controller jitters in VR. Same orientation on both controllers, so one `--mount` serves both.
+4. **Joystick into the head.** Pin header toward the **wrist** (the back of the head; `STICK_INVERT_Y 0` assumes this). Its plugs hang straight down into the top of the grip. Screw it to the four ribs with the **4 × M3×8**. The knob sticks up through the round hole.
+5. **A button** through the hole in front of the joystick, ring on the outside, nut on the inside.
+6. **FSR (grip)** into the round pocket on the front of the grip, under your fingers, pad facing out. Its tail goes through the slit next to the pocket into the grip, past the IMU's plugs. A strip of tape holds the pad flat in the pocket.
+7. **Vibration motor and antenna.** The case has no spot for either. Tape the motor to the inside wall of the head, where your hand will feel it. Run the antenna along the inside wall of the head or arm, away from the battery and the ESP32's metal can.
+8. **Battery holder into the `cradle`.** It snaps in under the two lips, cells facing out. Lay its leads in the channels behind it and out through the exits at the top or bottom. Then slide the cradle's rails into the notches in the arm and the bow of `half_l`. The cradle is clamped by both halves, so it goes in **before** closing.
+9. **Route and tie the wires.** Everything crossing between the ESP32 and the joystick or IMU goes through the window in the divider wall. Zip-tie bundles to the anchors in the head, the arm and the grip, so no wire sits on the split line or in a screw hole. Trim the tie tails.
+10. **Test before closing.** Batteries in, keep it still until it buzzes, then run `python -m myphonevision_bridge --no-hmd --debug` and check the stick, A, grip and tilt.
+11. **Close it.** Put `half_r` on, checking that no wire is pinched along the edge. Fasten with the **4 × M3×12**. If it won't close flat, a wire or plug is in the way: open it and re-route, don't force it.
+12. **Cover on.** Slide the `cover` across the cells from the side. Cells swap without opening the case.
+
+**After assembly:** run the test from step 10 again, and pick the bridge's `--mount` preset to match how the IMU faces (`firmware/controller/README.md`).
 
 ### 2h. As built (2026-11-14): what goes in each shell
 
