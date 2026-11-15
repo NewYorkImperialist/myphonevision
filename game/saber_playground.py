@@ -64,6 +64,7 @@ HILT_PARTS = [
     ("flare", 0.236, 0.266, 0.0168, CHROME),   # emitter shroud, flares out 27%
     ("cyl", 0.266, 0.271, 0.0212, CHROME),     # emitter lip
 ]
+CUBE_GOLD = (1.0, 0.72, 0.18)
 IGNITE_S = 0.25
 FLOAT_COUNT = 9
 THROW_EVERY_S = 1.1
@@ -156,7 +157,15 @@ vec3 bladeLight(vec3 p, vec3 n) {
   }
   return min(sum, vec3(2.0));
 }
-vec3 fogged(vec3 c, vec3 p) { return mix(c, uBg, 1.0 - exp(-length(uEye - p) * 0.07)); }
+vec3 skyColor(vec3 d) {
+  vec3 c = mix(vec3(0.07, 0.045, 0.15), uBg, smoothstep(0.0, 0.5, d.y));   // violet horizon to dark zenith
+  return c + vec3(0.32, 0.16, 0.5) * exp(-abs(d.y) * 30.0) * 0.3;           // thin bright band at the horizon
+}
+vec3 fogged(vec3 c, vec3 p) {
+  vec3 d = p - uEye;
+  float L = length(d);
+  return mix(c, skyColor(d / max(L, 1e-4)), 1.0 - exp(-L * 0.07));
+}
 """
 
 VS_INST = """#version 330 core
@@ -170,18 +179,19 @@ layout(location=6) in vec4 iM3;
 layout(location=7) in vec4 iScaleLen;
 layout(location=8) in vec4 iColor;
 uniform mat4 uVP;
-out vec3 vN; out vec3 vW; out vec4 vC;
+out vec3 vN; out vec3 vW; out vec4 vC; out vec3 vL; out vec3 vS; out float vLen;
 void main() {
   mat4 M = mat4(iM0, iM1, iM2, iM3);
   vec3 local = aPos * iScaleLen.xyz + vec3(0.0, aSeg * iScaleLen.w, 0.0);
   vec4 w = M * vec4(local, 1.0);
   vW = w.xyz; vN = mat3(M) * aNrm; vC = iColor;
+  vL = aPos; vS = iScaleLen.xyz; vLen = iScaleLen.w;
   gl_Position = uVP * w;
 }
 """
 
 FS_LIT = """#version 330 core
-in vec3 vN; in vec3 vW; in vec4 vC;
+in vec3 vN; in vec3 vW; in vec4 vC; in vec3 vL; in vec3 vS; in float vLen;
 out vec4 frag;
 """ + COMMON + """
 void main() {
@@ -190,7 +200,28 @@ void main() {
   float diff = max(dot(n, normalize(vec3(0.35, 1.0, 0.25))), 0.0) * 0.55 + 0.18;
   float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0) * 0.35;
   vec3 col;
-  if (vC.a < 0.0) {  // metal: mirror-ish reflection of a dim room with a bright horizon, plus blade light
+  if (vC.a >= 2.0) {  // target cube: dark glass body, glowing edges, hot cut face (vLen = side * (axis + 1 + 0.9 heat))
+    vec3 dm = (1.0 - abs(vL)) * vS;                       // meters to each pair of faces
+    float e = dm.x + dm.y + dm.z - min(dm.x, min(dm.y, dm.z)) - max(dm.x, max(dm.y, dm.z));  // to the nearest edge
+    float w = fwidth(e) + 1e-5;
+    float edge = 1.0 - smoothstep(0.0055 - w, 0.0055 + w, e);
+    float halo = exp(-e * 70.0);
+    float inset = (1.0 - smoothstep(0.0, w * 1.5, abs(e - 0.026))) * 0.35;
+    vec3 r = reflect(-V, n);
+    float spec = pow(max(dot(r, normalize(vec3(0.35, 1.0, 0.25))), 0.0), 40.0);
+    float fres = pow(1.0 - max(dot(n, V), 0.0), 2.5);
+    vec3 glow = vC.rgb * 1.7 + 0.12;
+    col = vC.rgb * (0.05 + 0.09 * diff) + vC.rgb * fres * 0.55 + spec * 0.5
+        + bladeLight(vW, n) * (0.15 + 0.25 * vC.rgb)
+        + glow * (edge + halo * 0.45 + inset);
+    if (abs(vLen) > 0.5) {
+      int k = int(abs(vLen)) - 1;
+      float heat = fract(abs(vLen)) / 0.9;
+      if (vL[k] * sign(vLen) > 0.98) {
+        col = mix(vC.rgb * 0.5, vec3(1.0, 0.92, 0.75) * 2.2, heat) * (0.35 + heat) + glow * edge;
+      }
+    }
+  } else if (vC.a < 0.0) {  // metal: mirror-ish reflection of a dim room with a bright horizon, plus blade light
     float metal = -vC.a;
     vec3 r = reflect(-V, n);
     vec3 env = mix(vec3(0.03, 0.035, 0.06), vec3(0.06, 0.07, 0.11), step(0.0, r.y))
@@ -245,6 +276,31 @@ void main() {
 """
 
 
+VS_SKY = """#version 330 core
+out vec2 vNdc;
+void main() {
+  vec2 p = vec2(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2 ? 3.0 : -1.0);   // one triangle covering the view
+  vNdc = p;
+  gl_Position = vec4(p, 0.0, 1.0);
+}
+"""
+
+FS_SKY = """#version 330 core
+in vec2 vNdc;
+out vec4 frag;
+uniform mat4 uInvVP;
+""" + COMMON + """
+float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+void main() {
+  vec4 w = uInvVP * vec4(vNdc, 1.0, 1.0);
+  vec3 d = normalize(w.xyz / w.w - uEye);
+  vec3 q = d * 140.0;
+  float star = step(0.985, hash(floor(q))) * smoothstep(0.22, 0.0, length(fract(q) - 0.5));
+  frag = vec4(skyColor(d) + vec3(0.6, 0.65, 0.9) * star * smoothstep(0.06, 0.35, d.y) * 0.5, 1.0);
+}
+"""
+
+
 def compile_program(vs, fs):
     def stage(src, kind):
         sh = gl.glCreateShader(kind)
@@ -259,7 +315,7 @@ def compile_program(vs, fs):
     gl.glLinkProgram(prog)
     if not gl.glGetProgramiv(prog, gl.GL_LINK_STATUS):
         raise RuntimeError(gl.glGetProgramInfoLog(prog).decode())
-    names = ["uVP", "uEye", "uBg", "uBladeA", "uBladeB", "uBladeCol", "uCenter"]
+    names = ["uVP", "uEye", "uBg", "uBladeA", "uBladeB", "uBladeCol", "uCenter", "uInvVP"]
     return prog, {n: gl.glGetUniformLocation(prog, n) for n in names}
 
 
@@ -453,10 +509,18 @@ class Target:
 
 
 class Debris:
-    def __init__(self, pos, vel, R, half, color):
+    def __init__(self, pos, vel, R, half, color, cut_axis=0, cut_side=0):
         self.pos, self.vel, self.R, self.half, self.color = pos, vel, R, half, color
         self.spin_axis, self.spin = normalize(np.random.randn(3)), random.uniform(4, 10)
         self.life = 2.0
+        self.cut_axis, self.cut_side = cut_axis, cut_side   # which face is the fresh cut (glows, then cools)
+
+    def cut_code(self):
+        """The cube shader's per-instance cut face: side * (axis + 1 + 0.9 * heat); 0 = none."""
+        if not self.cut_side:
+            return 0.0
+        heat = max(0.0, min(1.0, (self.life - 1.2) / 0.8))
+        return self.cut_side * (self.cut_axis + 1 + 0.9 * heat)
 
 
 SEGMENTS = {"0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc", "5": "afgcd",
@@ -475,6 +539,8 @@ class Game:
         self.spark_vel = np.zeros((0, 3))
         self.spark_life = np.zeros(0)
         self.spark_col = np.zeros((0, 3))
+        self.flashes: list = []   # (position, color, time) of each slice: a quick expanding glow
+        self.popups: list = []    # (position, text, color, time): "+points" floating up from each slice
         self.throw_mode = False
         self.throw_timer = 0.0
         self.spawn_timer = 0.0
@@ -492,6 +558,8 @@ class Game:
     def reset(self):
         self.targets.clear()
         self.debris.clear()
+        self.flashes.clear()
+        self.popups.clear()
         self.score = self.combo = 0
         self.anchor = None
 
@@ -513,13 +581,17 @@ class Game:
 
     def spawn_float(self):
         pos, f = yaw_frame(self.head)
-        ang = random.uniform(-self.spawn_arc, self.spawn_arc)
-        d = rot_axis((0, 1, 0), ang) @ f
-        home = pos + d * random.uniform(*self.spawn_dist)
-        home[1] = random.uniform(*self.spawn_height)
-        hue = random.random()
-        color = np.clip(np.abs(np.array([hue * 6 - 3, 2 - abs(hue * 6 - 2), 2 - abs(hue * 6 - 4)])) - [1, 0, 0], 0.15, 1)
-        self.targets.append(Target(home.copy(), home, np.zeros(3), random.uniform(0.17, 0.25), color, False))
+        others = [t.home for t in self.targets if not t.thrown]
+        for _ in range(12):   # keep cubes apart so they don't clump
+            ang = random.uniform(-self.spawn_arc, self.spawn_arc)
+            d = rot_axis((0, 1, 0), ang) @ f
+            home = pos + d * random.uniform(*self.spawn_dist)
+            home[1] = random.uniform(*self.spawn_height)
+            if all(np.linalg.norm(home - o) > 0.48 for o in others):
+                break
+        # Floating cubes take the two blade colors; gold marks the thrown ones.
+        color = COLOR_SETS[self.color_set][random.randrange(2)]
+        self.targets.append(Target(home.copy(), home, np.zeros(3), random.uniform(0.18, 0.24), color, False))
 
     def spawn_thrown(self):
         apos, af = self.anchor
@@ -530,7 +602,7 @@ class Game:
         aim = hpos + af * 0.45 + right * random.uniform(-0.35, 0.35)
         aim[1] = random.uniform(1.0, 1.5)
         vel = normalize(aim - start) * 3.0
-        self.targets.append(Target(start, start, vel, 0.2, (1.0, 0.85, 0.2), True))
+        self.targets.append(Target(start, start, vel, 0.2, CUBE_GOLD, True))
 
     # -- simulation --
     def update(self, dt, head, hands):
@@ -604,12 +676,15 @@ class Game:
         for sgn in (1, -1):
             axis = tg.R[:, k] * sgn
             vel = tg.vel + v * 0.25 + axis * random.uniform(1.0, 1.8) + np.random.randn(3) * 0.2
-            self.debris.append(Debris(tg.pos + axis * tg.size / 4, vel, tg.R.copy(), half.copy(), tg.color))
+            self.debris.append(Debris(tg.pos + axis * tg.size / 4, vel, tg.R.copy(), half.copy(), tg.color,
+                                      cut_axis=k, cut_side=-sgn))
         self.sparks(c, v * 0.3, 26, b.color)
         b.haptic_frames = 5
         self.combo = self.combo + 1 if self.t - self.last_slice < 2.0 else 1
         self.last_slice = self.t
         self.score += self.combo
+        self.flashes.append((tg.pos.copy(), np.clip(tg.color * 0.6 + 0.4, 0, 1), self.t))
+        self.popups.append((tg.pos + np.array([0, tg.size * 0.7, 0]), f"+{self.combo}", tg.color, self.t))
 
     def update_targets(self, dt):
         hpos, _ = yaw_frame(self.head)
@@ -629,7 +704,20 @@ class Game:
                 tg.pos = tg.pos + tg.vel * dt
                 if tg.pos[1] < 0.1 or np.linalg.norm(tg.pos - hpos) > 8:
                     tg.alive = False
+        # Floating cubes nudge each other apart instead of passing through.
+        floats = [t for t in self.targets if t.alive and not t.thrown]
+        for i, a in enumerate(floats):
+            for c in floats[i + 1:]:
+                d = a.pos - c.pos
+                L = float(np.linalg.norm(d))
+                gap = a.radius + c.radius + 0.04
+                if 1e-6 < L < gap:
+                    push = d / L * (gap - L) * 6.0 * dt
+                    a.vel, c.vel = a.vel + push * 10, c.vel - push * 10
+                    a.home, c.home = a.home + push, c.home - push
         self.targets = [t for t in self.targets if t.alive]
+        self.flashes = [f for f in self.flashes if self.t - f[2] < 0.3]
+        self.popups = [p for p in self.popups if self.t - p[3] < 0.9]
         floating = sum(1 for t in self.targets if not t.thrown)
         self.spawn_timer -= dt
         if floating < FLOAT_COUNT and self.spawn_timer <= 0:
@@ -672,11 +760,27 @@ class Game:
     def build(self, r):
         solid_cubes, solid_caps, glow_caps = r.cubes, r.caps, r.glows
         for tg in self.targets:
-            s = min(1.0, tg.age / 0.3) * tg.size / 2
-            solid_cubes.add(mat4(tg.R, tg.pos), np.full(3, s), 0.0, (*tg.color, 0.12))
+            grow = min(1.0, tg.age / 0.3)
+            s = (1 - (1 - grow) ** 3) * tg.size / 2
+            solid_cubes.add(mat4(tg.R, tg.pos), np.full(3, s), 0.0, (*tg.color, 2.0))
+            if grow < 1:   # appear with a soft pop of light
+                glow_caps.add(mat4(np.eye(3), tg.pos), np.full(3, tg.size * (0.25 + 0.4 * grow)), 0.0, (*tg.color, 0.3 * (1 - grow) ** 2))
         for d in self.debris:
             shrink = min(1.0, d.life / 0.4)
-            solid_cubes.add(mat4(d.R, d.pos), d.half * shrink, 0.0, (*d.color, 0.12))
+            solid_cubes.add(mat4(d.R, d.pos), d.half * shrink, d.cut_code(), (*d.color, 2.0))
+        for pos, color, t0 in self.flashes:
+            a = (self.t - t0) / 0.3
+            rad = 0.04 + 0.16 * a
+            glow_caps.add(mat4(np.eye(3), pos), np.full(3, rad), 0.0, (*color, 0.8 * (1 - a) ** 2))
+        if self.popups:
+            hpos, hf = yaw_frame(self.head)
+            for pos, text, color, t0 in self.popups:
+                a = (self.t - t0) / 0.9
+                p = pos + np.array([0, 0.25 * (1 - (1 - a) ** 2), 0])
+                f = normalize(np.array([hpos[0] - p[0], 0.0, hpos[2] - p[2]]))   # face the player
+                R = np.column_stack((np.cross((0, 1, 0), f), (0, 1, 0), f))
+                bright = np.clip(np.array(color) * 0.5 + 0.6, 0, 1)
+                self.glow_digits(glow_caps, p, R, text, 0.09, bright, 1.6 * (1 - a ** 2))
         for b in self.blades:
             if not b.valid:
                 continue
@@ -748,11 +852,11 @@ class Game:
             R = rot_axis((0, 1, 0), ang)
             cubes.add(mat4(R, (p[0], h / 2, p[2])), (0.25, h / 2, 0.25), 0.0, (0.12, 0.16, 0.3, 0.0))
             cubes.add(mat4(R, (p[0], h + 0.04, p[2])), (0.27, 0.04, 0.27), 0.0, (*COLOR_SETS[self.color_set][i % 2], 0.9))
-        board = apos + f * 2.8
-        board[1] = 2.2
-        self.digits(cubes, board, Rb, f"{self.score:4d}"[-4:], 0.30)
+        board = apos + f * 3.6
+        board[1] = 2.75
+        self.digits(cubes, board, Rb, f"{self.score:4d}"[-4:], 0.38)
         if self.combo >= 2:
-            self.digits(cubes, board - np.array([0, 0.33, 0]), Rb, f"x{self.combo}"[-3:].replace("x", " "), 0.16)
+            self.digits(cubes, board - np.array([0, 0.4, 0]), Rb, f"x{self.combo}"[-3:].replace("x", " "), 0.18)
 
     @staticmethod
     def digits(cubes, center, R, text, h):
@@ -768,6 +872,25 @@ class Game:
                 p = center + R @ np.array([x0 + i * pitch + sx, sy, 0])
                 color = (0.6, 0.9, 1.0, 1.0) if name in on else (0.05, 0.07, 0.12, 0.6)
                 cubes.add(mat4(R, p), half, 0.0, color)
+
+    @staticmethod
+    def glow_digits(glows, center, R, text, h, color, alpha):
+        """Seven-segment text drawn with glow capsules (fades with alpha); '+' is supported."""
+        w = h * 0.55
+        rad = h * 0.07
+        segs = {"a": (0, h / 2, 1), "b": (w / 2, h / 4, 0), "c": (w / 2, -h / 4, 0), "d": (0, -h / 2, 1),
+                "e": (-w / 2, -h / 4, 0), "f": (-w / 2, h / 4, 0), "g": (0, 0, 1)}
+        pitch = w * 1.7
+        x0 = -pitch * (len(text) - 1) / 2
+        for i, ch in enumerate(text):
+            on = [(segs[s][0], segs[s][1], segs[s][2], w if segs[s][2] else h / 2) for s in SEGMENTS.get(ch, "")]
+            if ch == "+":
+                on = [(0, 0, 1, w), (0, 0, 0, w)]
+            for sx, sy, horiz, L in on:
+                axis = R[:, 0] if horiz else R[:, 1]
+                mid = center + R @ np.array([x0 + i * pitch + sx, sy, 0])
+                L = L * 0.82
+                glows.add(mat4(basis_from_y(axis), mid - axis * L / 2), np.full(3, rad), L, (*color, alpha))
 
     def blade_uniforms(self):
         A = np.zeros((2, 3), np.float32)
@@ -786,6 +909,8 @@ class Renderer:
         self.lit = compile_program(VS_INST, FS_LIT)
         self.glow = compile_program(VS_INST, FS_GLOW)
         self.floor = compile_program(VS_FLOOR, FS_FLOOR)
+        self.sky = compile_program(VS_SKY, FS_SKY)
+        self.sky_vao = gl.glGenVertexArrays(1)
         self.cubes, self.caps, self.glows = Batch(cube_mesh()), Batch(capsule_mesh()), Batch(capsule_mesh())
         self.cyls, self.flares = Batch(cylinder_mesh()), Batch(cylinder_mesh(top_ratio=1.27))
         quad = np.array([[-40, 0, -40], [40, 0, -40], [40, 0, 40], [-40, 0, -40], [40, 0, 40], [-40, 0, 40]], np.float32)
@@ -826,6 +951,12 @@ class Renderer:
         gl.glDepthMask(gl.GL_TRUE)
         gl.glDisable(gl.GL_BLEND)
         gl.glDisable(gl.GL_CULL_FACE)
+        gl.glDisable(gl.GL_DEPTH_TEST)
+        self._uniforms(self.sky, VP, eye)
+        gl.glUniformMatrix4fv(self.sky[1]["uInvVP"], 1, gl.GL_TRUE, np.linalg.inv(VP).astype(np.float32))
+        gl.glBindVertexArray(self.sky_vao)
+        gl.glDrawArrays(gl.GL_TRIANGLES, 0, 3)
+        gl.glEnable(gl.GL_DEPTH_TEST)
         self._uniforms(self.floor, VP, eye)
         gl.glBindVertexArray(self.floor_vao)
         gl.glDrawArrays(gl.GL_TRIANGLES, 0, 6)
