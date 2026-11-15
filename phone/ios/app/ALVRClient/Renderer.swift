@@ -273,8 +273,8 @@ final class Renderer {
     // Renders the room into a side-by-side eye texture at a (optionally delayed) pose,
     // the way the PC renders a stream frame, then shows it through the same lens pass
     // and reprojection as the stream.
-    var testMode = false
-    var saberMode = false               // with testMode: the sword game instead of the test room
+    var testMode = true                 // the app opens in the sword game (a test-mode scene)
+    var saberMode = true                // with testMode: the sword game instead of the test room
     let saberGame = SaberGame()
     private var saberFrame = 0
     private var saberEyesPipelineState: MTLRenderPipelineState?
