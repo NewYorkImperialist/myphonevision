@@ -9,13 +9,16 @@ Two halves split down the middle, a battery cradle that closes the finger loop, 
 
 **Print the fit test first:** `part="fit_test"` (about 45 min, 10.7 cm³). It covers the ESP32 seat, a cradle section, the cover end and the IMU clamp, all cut from the real geometry. Uploaded 2026-11-14 as pickup code **9AF7**. Use the same slicer settings as the real parts.
 
-| Order | Part | Volume | Rough time |
-| --- | --- | --- | --- |
-| 1 | `fit_test` | 10.7 cm³ | ~45 min |
-| 2 | `half_l` + `imu_clamp` | 57 cm³ | 2.8–5.7 h |
-| 3 | `half_r` | 52.8 cm³ | 2.6–5.3 h |
-| 4 | `cradle` | 30.1 cm³ | 1.5–3 h |
-| 5 | `cover` | 8.5 cm³ | 25–50 min |
+**Fit test printed 2026-11-14: everything fit** except the IMU mount, where a wire leaves the board's VCC corner. Both IMU corners now have a wire relief (`img/d_ergo-imu_relief.png`); nothing else changed.
+
+Print plates for a Prusa Core One (250 × 220), each part in print orientation, no supports. Center them in the slicer.
+
+| Plate | Parts | Bed footprint | Volume | Rough time |
+| --- | --- | --- | --- | --- |
+| `plate_a` | `half_l` + `imu_clamp` + `cover` | 205.9 × 133.2 | 65.3 cm³ | 3.3–6.5 h |
+| `plate_b` | `half_r` + `cradle` | 208.5 × 133.2 | 82.9 cm³ | 4.1–8.3 h |
+
+OrcaSlicer settings that passed the fit test: 0.28 mm layers, 2 walls, 4/3 top/bottom, 12% grid, supports off, elephant foot 0.15.
 
 All parts print without supports in the orientation `part="print"` shows. Times are volume estimates, not slicer figures.
 

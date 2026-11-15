@@ -18,7 +18,8 @@ for c in ${@:-a b c d}; do
     a) f=a_paddle.scad; parts="top bottom"; cutcam=72,0,62 ;;
     b) f=b_standup.scad; parts="head head_base spine pod"; cutcam=72,0,62 ;;
     c) f=c_pistol.scad; parts="half_l half_r guard"; cutcam=78,0,12 ;;
-    d) f=d_ergo.scad; parts="half_l half_r cradle cover imu_clamp fit_test fit_esp fit_cradle fit_cover"; cutcam=80,0,10
+    d) f=d_ergo.scad; parts="half_l half_r cradle cover imu_clamp fit_test fit_esp fit_cradle fit_cover plate_a plate_b"; cutcam=80,0,10
+       png $f plate_a 0,0,0 -D 'part="plate_a"'; png $f plate_b 0,0,0 -D 'part="plate_b"'
        png $f fit_test 45,0,25 -D 'part="fit_test"'; png $f fit_test_top 0,0,0 -D 'part="fit_test"'
        png $f side 88,0,0; png $f hero 68,0,28; png $f nose 75,0,90
        png $f inside_l 32,0,15 -D 'part="half_l"'; png $f inside_r 32,0,15 -D 'part="half_r"'

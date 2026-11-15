@@ -13,6 +13,8 @@
 //             top end and two snap hooks at the USB end.
 //   IMU       on a pad on the left cheek, pushed into a corner made by two fences and held by
 //             a slotted clamp and one M3 screw. Fits the BNO055 and the smaller GY-521.
+//             Both corners at the fenced end are cut away for the wire soldered to the
+//             header's end pin (VCC).
 //   joystick  screws to ribs; its plugs hang straight down into the top of the grip.
 //   wires     zip-tie anchors in the head, the arm and the grip.
 //   shorts    a divider wall crosses the grip between the ESP32 and the joystick's and IMU's
@@ -25,6 +27,7 @@
 //   cover           slides over the cells; print flat, wide face down
 //   imu_clamp       print flat
 //   assembly, print (all parts as they sit on the bed)
+//   plate_a, plate_b  print plates for a 250 x 220 bed: left half + IMU clamp + cover, right half + cradle
 //   fit_test        print this first: the ESP32 seat and IMU mount, a section of the cradle, the
 //                   end of the cover and the IMU clamp, all cut from the real parts
 //                   (fit_esp, fit_cradle, fit_cover print them one at a time)
@@ -86,6 +89,13 @@ imu_x0 = grip_c - imu[1] / 2;
 imu_z = wall + 2;                         // on a 2 mm pad, so solder joints under the header edge hang free
 pad_w = 10;                               // pad and fences stay under the half away from the header
 imu_boss = [imu_x0 + 5, s_imu - 4.5];
+// Wire reliefs at the IMU's fenced end (found with the fit test: a wire soldered to the header's end
+// pin hit the end fence). Header corner: a notch in the end fence (the ESP32 stop's back; its wedge
+// and the 1.3 mm behind it stay) and in the divider's foot. Back corner: the back fence's last
+// 5.5 mm and the pad under it. Both go through the full height.
+relief_x = [grip_c + 1.5, grip_c + 7.1];  // header-corner notch, across the grip
+relief_s = [s_esp - 4.1, s_esp - 1.6];    // and down the grip, starting 0.2 past the BNO055's end
+relief_back = 5.5;
 
 // Divider across the grip, in both halves, between the IMU and joystick plugs above and the ESP32 below.
 div_t = 1.4;
@@ -125,6 +135,12 @@ assert(pad_w + 1 <= gy521[1] - 2.6, "IMU pad or clamp reaches the GY-521's heade
 assert(imu_z + 1.6 + plug_len <= W - wall - 4 - 1, "IMU plugs reach the wire anchor on the right cheek");
 assert(imu_x0 + imu[1] + 1 <= front_in, "IMU does not fit between the grip's walls");
 assert(front_in - (imu_x0 + imu[1]) >= 1 && grip_d - groove - wall - (imu_x0 + imu[1]) >= 5, "no path for the FSR tail past the IMU's plugs");
+// IMU wire reliefs: the GY-521's header end lands in the notch, the BNO055's is already past the fence,
+// and enough fence is left to locate either board.
+assert(imu_x0 + gy521[1] - 2.6 >= relief_x[0] && imu_x0 + gy521[1] <= relief_x[1] + 0.5, "GY-521's header end misses the wire relief");
+assert(imu_x0 + imu[1] - 2.6 >= grip_c + stop_x, "BNO055's header end is behind the end fence");
+assert(gy521[0] - relief_back >= 8 && relief_x[0] - (grip_c - stop_x) >= 8, "too little fence left to locate the IMU");
+assert(s_esp - 0.3 - relief_s[1] >= 1.2, "wire relief cuts into the ESP32's stop");
 // Divider: clear of every plug and board on both sides, with a window big enough for the wires.
 assert(div_t >= 1.2 && div_t <= 1.6, "divider should be 1.2 to 1.6 mm");
 assert(to_grip([jp_x[0], jp_y[1]])[1] + 1 <= div_s, "divider is in the joystick plugs' space");
@@ -187,7 +203,7 @@ module tie(p, turn = 0) translate([p[0], p[1], 0]) rotate([0, 0, turn]) differen
 }
 
 // Left half only: the ESP32's seat and the IMU's.
-module left_fittings() in_grip() {
+module left_fittings() in_grip() difference() { union() {
   // ESP32: a ledge under each long edge, a rail beside it, from just below the top to just above the USB end.
   for (sx = [-1, 1]) translate([grip_c + sx * (devkit[1] / 2 + 0.3), -s_end + 3, 0]) {
     translate([sx < 0 ? -4 : 0, 0, 0]) cube([4, devkit[0] - 6, esp_top + 2.5]);
@@ -203,6 +219,10 @@ module left_fittings() in_grip() {
   translate([imu_x0, -(s_imu + imu[0]), 0]) cube([pad_w, imu[0], imu_z]);
   translate([imu_x0 - 4, -(s_imu + imu[0]), 0]) cube([3.8, imu[0], imu_z + 2.6]);
   translate([imu_boss[0], -imu_boss[1], 0]) cylinder(d = 8, h = imu_z + 1.6);
+  }
+  // Wire reliefs (see relief_x above).
+  translate([relief_x[0], -relief_s[1], -1]) cube([relief_x[1] - relief_x[0], relief_s[1] - relief_s[0], 50]);
+  translate([imu_x0 - 4.5, -(s_imu + imu[0] + 0.2), -1]) cube([9.5, relief_back + 0.2, 50]);
 }
 
 // One half, cheek on the bed (z = 0), split plane up (z = h).
@@ -233,6 +253,8 @@ module half(right = false) {
           in_grip() difference() {
             translate([0, -(div_s + div_t), 0]) cube([grip_d, div_t, h]);
             translate([grip_c - div_gap[0] / 2, -(div_s + div_t) - 1, h - div_gap[1] / 2]) cube([div_gap[0], div_t + 2, div_gap[1]]);
+            // IMU wire relief; the ESP32's stop stands right behind this gap.
+            if (!right) translate([relief_x[0], -(div_s + div_t) - 1, -1]) cube([relief_x[1] - relief_x[0], div_t + 2, esp_top + 2.7 + 1]);
           }
         }
       }
@@ -370,6 +392,15 @@ else if (part == "half_r") mirror([0, 1, 0]) half(right = true);
 else if (part == "cradle") cradle();
 else if (part == "cover") cover();
 else if (part == "imu_clamp") imu_clamp();
+else if (part == "plate_a") {
+  half();
+  translate([head_len + 6 + hold[0] / 2, -110, 0]) cover();
+  translate([head_len + 20, -25, 0]) imu_clamp();
+}
+else if (part == "plate_b") {
+  mirror([0, 1, 0]) half(right = true);
+  translate([head_len + 6 + cradle[0] / 2, 20, 0]) cradle();
+}
 else if (part == "fit_test") fit_test();
 else if (part == "fit_esp") fit_esp();
 else if (part == "fit_cradle") fit_cradle();
