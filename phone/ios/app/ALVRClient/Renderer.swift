@@ -273,6 +273,9 @@ final class Renderer {
     // the way the PC renders a stream frame, then shows it through the same lens pass
     // and reprojection as the stream.
     var testMode = false
+    var saberMode = false               // with testMode: the sword game instead of the test room
+    let saberGame = SaberGame()
+    private var saberEyesPipelineState: MTLRenderPipelineState?
     private var testEyesPipelineState: MTLRenderPipelineState?
     private var frameRGBPipelineState: MTLRenderPipelineState?
     private var testEyesTexture: MTLTexture?
@@ -283,6 +286,8 @@ final class Renderer {
         if testEyesPipelineState == nil {
             testEyesPipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrTestEyes",
                                                                                  secondColorFormat: .r16Float)
+            saberEyesPipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrSaberEyes",
+                                                                                  secondColorFormat: .r16Float)
             frameRGBPipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrStreamRGB")
             let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: globalPixelFormat, width: 2048, height: 1024, mipmapped: false)
             desc.usage = [.renderTarget, .shaderRead]
@@ -318,9 +323,14 @@ final class Renderer {
         eyesPass.colorAttachments[1].storeAction = .store
         if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: eyesPass) {
             encoder.label = "Test eyes"
-            encoder.setRenderPipelineState(testEyesPipelineState!)
+            encoder.setRenderPipelineState(saberMode ? saberEyesPipelineState! : testEyesPipelineState!)
             encoder.setFragmentBytes(&renderUniforms, length: MemoryLayout<VRUniforms>.stride, index: 0)
             encoder.setFragmentBytes(&frameUniforms, length: MemoryLayout<VRFrameUniforms>.stride, index: 1)
+            if saberMode {
+                saberGame.update(head: renderedHead, now: now)
+                let scene = saberGame.scene()
+                scene.withUnsafeBytes { encoder.setFragmentBytes($0.baseAddress!, length: $0.count, index: 2) }
+            }
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
             encoder.endEncoding()
         }
@@ -664,5 +674,297 @@ final class RotatingTexture {
             }
         }
         return textures[index]
+    }
+}
+
+
+// MARK: - Sword game (no SteamVR)
+// Emergency mode: the phone runs the sword game itself and draws it with vrSaberEyes
+// (Shaders.metal) through the same lens pass as test mode, so SteamVR and the video
+// stream aren't involved. The hands come from the laptop bridge over UDP through the
+// USB hotspot: `python -m myphonevision_bridge --no-hmd --phone 172.20.10.1`.
+
+/// Receives hand poses from the bridge: b"MPVH", hand, 3 pad bytes, then position
+/// x y z (m) and rotation w x y z as little-endian floats, in SteamVR axes.
+final class HandReceiver {
+    static let shared = HandReceiver()
+    static let port: UInt16 = 39601
+    private let lock = NSLock()
+    private var poses: [simd_float4x4] = [matrix_identity_float4x4, matrix_identity_float4x4]
+    private var stamps: [Double] = [0, 0]
+    private var started = false
+
+    func start() {
+        lock.lock(); defer { lock.unlock() }
+        if started { return }
+        started = true
+        let thread = Thread { [weak self] in self?.run() }
+        thread.qualityOfService = .userInteractive
+        thread.start()
+    }
+
+    private func run() {
+        let fd = socket(AF_INET, SOCK_DGRAM, 0)
+        guard fd >= 0 else { print("HandReceiver: no socket"); return }
+        var one: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, socklen_t(MemoryLayout<Int32>.size))
+        var addr = sockaddr_in()
+        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = HandReceiver.port.bigEndian
+        addr.sin_addr = in_addr(s_addr: 0)
+        let bound = withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        guard bound == 0 else { print("HandReceiver: bind failed"); close(fd); return }
+        var buf = [UInt8](repeating: 0, count: 128)
+        while true {
+            let n = buf.withUnsafeMutableBytes { recv(fd, $0.baseAddress, $0.count, 0) }
+            guard n >= 36, buf[0] == 0x4D, buf[1] == 0x50, buf[2] == 0x56, buf[3] == 0x48 else { continue }
+            let hand = Int(buf[4])
+            guard hand == 0 || hand == 1 else { continue }
+            let f: [Float] = buf.withUnsafeBytes { raw in (0..<7).map { raw.loadUnaligned(fromByteOffset: 8 + 4 * $0, as: Float.self) } }
+            var m = simd_float4x4(simd_normalize(simd_quatf(ix: f[4], iy: f[5], iz: f[6], r: f[3])))
+            m.columns.3 = SIMD4<Float>(f[0], f[1], f[2], 1)
+            lock.lock()
+            poses[hand] = m
+            stamps[hand] = CACurrentMediaTime()
+            lock.unlock()
+        }
+    }
+
+    /// A hand's latest pose, or nil if nothing came in the last half second.
+    func pose(_ hand: Int) -> simd_float4x4? {
+        lock.lock(); defer { lock.unlock() }
+        return CACurrentMediaTime() - stamps[hand] < 0.5 ? poses[hand] : nil
+    }
+}
+
+/// The sword game: cubes float around you; a fast swing slices one, a slow one pushes it.
+final class SaberGame {
+    struct Cube {
+        var pos: SIMD3<Float>, home: SIMD3<Float>, vel: SIMD3<Float>
+        var rot: simd_quatf, spinAxis: SIMD3<Float>, spin: Float
+        var half: Float, color: SIMD3<Float>, age: Float, phase: Float, cooldown: Float
+    }
+    struct Piece {
+        var pos: SIMD3<Float>, vel: SIMD3<Float>, rot: simd_quatf, spinAxis: SIMD3<Float>, spin: Float
+        var half: SIMD3<Float>, color: SIMD3<Float>, life: Float, cutAxis: Int, cutSide: Float
+    }
+    struct Blade {
+        var a = SIMD3<Float>(repeating: 0), b = SIMD3<Float>(repeating: 0)
+        var prevA = SIMD3<Float>(repeating: 0), prevB = SIMD3<Float>(repeating: 0)
+        var hilt = SIMD3<Float>(repeating: 0), dir = SIMD3<Float>(0, 0, -1)
+        var valid = false, length: Float = 0
+    }
+    static let colors: [SIMD3<Float>] = [SIMD3(0.15, 0.55, 1.0), SIMD3(1.0, 0.25, 0.08)]   // left, right
+    static let maxBoxes = 24
+    let lock = NSLock()
+    var cubes: [Cube] = [], pieces: [Piece] = []
+    var flashes: [(pos: SIMD3<Float>, color: SIMD3<Float>, age: Float)] = []
+    var blades = [Blade(), Blade()]
+    var score = 0, combo = 0
+    var t: Float = 0, lastSlice: Float = -10, spawnTimer: Float = 0
+    var anchorPos = SIMD3<Float>(0, 1.6, 0), anchorFwd = SIMD3<Float>(0, 0, -1), anchored = false
+    var lastTime: Double = 0
+
+    func reset() {
+        lock.lock(); defer { lock.unlock() }
+        cubes.removeAll(); pieces.removeAll(); flashes.removeAll()
+        score = 0; combo = 0; anchored = false; lastTime = 0
+        blades = [Blade(), Blade()]
+    }
+
+    private static func rnd(_ a: Float, _ b: Float) -> Float { Float.random(in: a...b) }
+    private static func randomAxis() -> SIMD3<Float> {
+        simd_normalize(SIMD3(rnd(-1, 1), rnd(-1, 1), rnd(-1, 1)) + SIMD3(0.001, 0.002, 0.003))
+    }
+
+    func update(head: simd_float4x4, now: Double) {
+        lock.lock(); defer { lock.unlock() }
+        let dt = lastTime == 0 ? Float(1.0 / 60) : Float(min(0.05, max(0.001, now - lastTime)))
+        lastTime = now
+        t += dt
+        let hp = SIMD3<Float>(head.columns.3.x, head.columns.3.y, head.columns.3.z)
+        var fwd = -SIMD3<Float>(head.columns.2.x, 0, head.columns.2.z)
+        fwd = simd_length(fwd) > 1e-3 ? simd_normalize(fwd) : SIMD3(0, 0, -1)
+        if !anchored { anchorPos = hp; anchorFwd = fwd; anchored = true }
+
+        for h in 0..<2 {
+            guard var m = HandReceiver.shared.pose(h) else { blades[h].valid = false; blades[h].length = 0; continue }
+            m.columns.3.x += hp.x   // the bridge places hands for a head at x = z = 0
+            m.columns.3.z += hp.z
+            var b = blades[h]
+            let d = simd_normalize(-SIMD3<Float>(m.columns.2.x, m.columns.2.y, m.columns.2.z))
+            let origin = SIMD3<Float>(m.columns.3.x, m.columns.3.y, m.columns.3.z)
+            b.length = min(1.0, b.length + dt / 0.25)
+            let a = origin + d * 0.15
+            if b.valid { b.prevA = b.a; b.prevB = b.b } else { b.prevA = a; b.prevB = a + d * b.length }
+            b.a = a; b.b = a + d * b.length; b.hilt = origin - d * 0.12; b.dir = d; b.valid = true
+            blades[h] = b
+        }
+        collide(dt)
+
+        // Floating cubes: spring toward home with a gentle bob, spin, keep apart.
+        for i in cubes.indices {
+            var c = cubes[i]
+            c.age += dt; c.cooldown -= dt
+            c.rot = simd_normalize(simd_quatf(angle: c.spin * dt, axis: c.spinAxis) * c.rot)
+            let home = c.home + SIMD3(0, 0.03 * sin(c.age * 1.3 + c.phase), 0)
+            c.vel += (4.0 * (home - c.pos) - 2.5 * c.vel) * dt
+            c.pos += c.vel * dt
+            cubes[i] = c
+        }
+        for i in cubes.indices {
+            for j in cubes.indices where j > i {
+                let d = cubes[i].pos - cubes[j].pos
+                let L = simd_length(d)
+                let gap = (cubes[i].half + cubes[j].half) * 1.24 + 0.04
+                if L > 1e-5 && L < gap {
+                    let push = d / L * (gap - L) * 6 * dt
+                    cubes[i].vel += push * 10; cubes[j].vel -= push * 10
+                    cubes[i].home += push; cubes[j].home -= push
+                }
+            }
+        }
+        cubes.removeAll { $0.pos.y < 0.1 || simd_length($0.pos - hp) > 8 }
+        spawnTimer -= dt
+        if cubes.count < 8 && spawnTimer <= 0 { spawn(); spawnTimer = 0.35 }
+
+        for i in pieces.indices {
+            var p = pieces[i]
+            p.vel.y -= 9.8 * dt
+            p.pos += p.vel * dt
+            p.rot = simd_normalize(simd_quatf(angle: p.spin * dt, axis: p.spinAxis) * p.rot)
+            let R = simd_matrix3x3(p.rot)
+            let low = abs(R.columns.0.y) * p.half.x + abs(R.columns.1.y) * p.half.y + abs(R.columns.2.y) * p.half.z
+            if p.pos.y < low { p.pos.y = low; p.vel *= SIMD3(0.6, -0.3, 0.6); p.spin *= 0.7 }
+            p.life -= dt
+            pieces[i] = p
+        }
+        pieces.removeAll { $0.life <= 0 }
+        for i in flashes.indices { flashes[i].age += dt }
+        flashes.removeAll { $0.age > 0.3 }
+    }
+
+    private func spawn() {
+        var home = anchorPos
+        for _ in 0..<12 {
+            let ang = SaberGame.rnd(-1.1, 1.1)
+            let dir = simd_quatf(angle: ang, axis: SIMD3(0, 1, 0)).act(anchorFwd)
+            home = anchorPos + dir * SaberGame.rnd(0.75, 1.25)
+            home.y = SaberGame.rnd(0.95, 1.7)
+            if cubes.allSatisfy({ simd_length($0.home - home) > 0.45 }) { break }
+        }
+        cubes.append(Cube(pos: home, home: home, vel: .zero,
+                          rot: simd_quatf(angle: SaberGame.rnd(0, 6.28), axis: SaberGame.randomAxis()),
+                          spinAxis: SaberGame.randomAxis(), spin: SaberGame.rnd(0.3, 1.2),
+                          half: SaberGame.rnd(0.09, 0.12), color: SaberGame.colors[Int.random(in: 0...1)],
+                          age: 0, phase: SaberGame.rnd(0, 6.28), cooldown: 0))
+    }
+
+    private func collide(_ dt: Float) {
+        for h in 0..<2 {
+            let b = blades[h]
+            guard b.valid, b.length > 0.2 else { continue }
+            var i = 0
+            while i < cubes.count {
+                let c = cubes[i]
+                var sliced = false
+                if c.cooldown <= 0 {
+                    for u in [Float(0.25), 0.5, 0.75, 1.0] {
+                        let A = b.prevA + (b.a - b.prevA) * u, B = b.prevB + (b.b - b.prevB) * u
+                        let AB = B - A
+                        let s = max(0, min(1, simd_dot(c.pos - A, AB) / max(simd_dot(AB, AB), 1e-6)))
+                        let hit = A + AB * s
+                        if simd_length(hit - c.pos) < c.half * 1.24 + 0.02 {
+                            let nowP: SIMD3<Float> = b.a + (b.b - b.a) * s
+                            let prevP: SIMD3<Float> = b.prevA + (b.prevB - b.prevA) * s
+                            let v: SIMD3<Float> = (nowP - prevP) / max(dt, Float(1e-3))
+                            if simd_length(v) > 1.5 {
+                                slice(i, blade: b, velocity: v)
+                                sliced = true
+                            } else {
+                                var away = c.pos - hit
+                                away = simd_length(away) > 1e-5 ? simd_normalize(away) : SIMD3(0, 1, 0)
+                                let kick: Float = simd_length(v) * 0.8 + 0.4
+                                let dv: SIMD3<Float> = away * kick + v * Float(0.4)
+                                cubes[i].vel += dv
+                                cubes[i].cooldown = 0.15
+                            }
+                            break
+                        }
+                    }
+                }
+                if !sliced { i += 1 }
+            }
+        }
+    }
+
+    private func slice(_ index: Int, blade b: Blade, velocity v: SIMD3<Float>) {
+        let c = cubes.remove(at: index)
+        var n = simd_cross(b.dir, v)
+        n = simd_length(n) > 1e-6 ? simd_normalize(n) : SIMD3(1, 0, 0)
+        let R = simd_matrix3x3(c.rot)
+        let axes = [R.columns.0, R.columns.1, R.columns.2]
+        var k = 0
+        for j in 1..<3 where abs(simd_dot(axes[j], n)) > abs(simd_dot(axes[k], n)) { k = j }
+        var half = SIMD3<Float>(repeating: c.half)
+        half[k] /= 2
+        for sgn: Float in [1, -1] {
+            let axis = axes[k] * sgn
+            let vel = c.vel + v * 0.25 + axis * SaberGame.rnd(1.0, 1.8) + SaberGame.randomAxis() * 0.2
+            pieces.append(Piece(pos: c.pos + axis * c.half / 2, vel: vel, rot: c.rot, spinAxis: SaberGame.randomAxis(),
+                                spin: SaberGame.rnd(4, 10), half: half, color: c.color, life: 2.0, cutAxis: k, cutSide: -sgn))
+        }
+        combo = t - lastSlice < 2 ? combo + 1 : 1
+        lastSlice = t
+        score += combo
+        flashes.append((c.pos, simd_clamp(c.color * 0.6 + 0.4, SIMD3(repeating: 0), SIMD3(repeating: 1)), 0))
+        if flashes.count > 4 { flashes.removeFirst() }
+    }
+
+    /// The scene for vrSaberEyes (layout at the top of its section in Shaders.metal).
+    func scene() -> [SIMD4<Float>] {
+        lock.lock(); defer { lock.unlock() }
+        var S = [SIMD4<Float>](repeating: .zero, count: 19 + SaberGame.maxBoxes * 5)
+        for h in 0..<2 {
+            let b = blades[h]
+            S[h] = SIMD4(b.a, b.valid ? 1 : 0)
+            S[2 + h] = SIMD4(b.b, 0)
+            S[4 + h] = SIMD4(SaberGame.colors[h], 0)
+            S[15 + h] = SIMD4(b.hilt, 0)
+        }
+        for (i, f) in flashes.suffix(4).enumerated() {
+            let a = f.age / 0.3
+            S[7 + i] = SIMD4(f.pos, 0.04 + 0.16 * a)
+            S[11 + i] = SIMD4(f.color, 0.8 * (1 - a) * (1 - a))
+        }
+        var board = anchorPos + anchorFwd * 3.6
+        board.y = 2.75
+        S[17] = SIMD4(board, 0)
+        S[18] = SIMD4(simd_normalize(simd_cross(anchorFwd, SIMD3(0, 1, 0))), 0)
+        var n = 0
+        func box(_ pos: SIMD3<Float>, _ rot: simd_quatf, _ half: SIMD3<Float>, _ color: SIMD3<Float>, _ code: Float) {
+            guard n < SaberGame.maxBoxes else { return }
+            let R = simd_matrix3x3(rot)
+            let o = 19 + n * 5
+            S[o] = SIMD4(pos, code)
+            S[o + 1] = SIMD4(R.columns.0 * max(half.x, 1e-4), 0)
+            S[o + 2] = SIMD4(R.columns.1 * max(half.y, 1e-4), 0)
+            S[o + 3] = SIMD4(R.columns.2 * max(half.z, 1e-4), 0)
+            S[o + 4] = SIMD4(color, 0)
+            n += 1
+        }
+        for c in cubes {
+            let grow = min(1, c.age / 0.3)
+            box(c.pos, c.rot, SIMD3(repeating: (1 - pow(1 - grow, 3)) * c.half), c.color, 0)
+        }
+        for p in pieces {
+            let heat = max(0, min(1, (p.life - 1.2) / 0.8))
+            box(p.pos, p.rot, p.half * min(1, p.life / 0.4), p.color, p.cutSide * (Float(p.cutAxis) + 1 + 0.9 * heat))
+        }
+        S[6] = SIMD4(Float(n), t, Float(score), Float(combo))
+        return S
     }
 }

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import queue
 import socket
+import struct
 import sys
 import threading
 import time
@@ -163,6 +164,16 @@ class Hand:
         self.last: P.ControllerPacket | None = None
 
 
+PHONE_PORT = 39601
+
+
+def phone_packet(hand: int, pos: Q.Vec, rot: Q.Quat) -> bytes:
+    """Hand pose for the iPhone app's sword game: b"MPVH", hand, 3 pad bytes, then
+    position x y z (m) and rotation w x y z, little-endian floats, in SteamVR axes
+    (+X right, +Y up, -Z forward; the head at x = z = 0 with --no-hmd)."""
+    return struct.pack("<4sB3x7f", b"MPVH", hand, *pos, *rot)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(prog="myphonevision_bridge", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -177,6 +188,8 @@ def main() -> None:
     ap.add_argument("--debug-follow", action="store_true",
                     help="pin both controllers 0.3 m in front of the head (checks the coordinate space)")
     ap.add_argument("--debug", action="store_true", help="print per-hand status every second")
+    ap.add_argument("--phone", metavar="HOST", help="also send hand poses to the iPhone app's sword game "
+                    "(USB hotspot: 172.20.10.1); use with --no-hmd when SteamVR isn't running")
     ap.add_argument("--squeeze", choices=sorted(SQUEEZE_TARGETS), default="both",
                     help="what the FSR squeeze sends: grip (grab), trigger (menus, firing) or both (default)")
     args = ap.parse_args()
@@ -199,6 +212,9 @@ def main() -> None:
             sys.exit(f"Couldn't reach SteamVR ({e}). Start SteamVR first, or pass --no-hmd.")
 
     vmt = V.Vmt(args.vmt_host)
+    phone_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) if args.phone else None
+    if args.phone:
+        print(f"Sending hand poses to the phone at {args.phone}:{PHONE_PORT}")
     squeeze_to = SQUEEZE_TARGETS[args.squeeze]
     arm = ArmModel()
     mount = with_pitch_trim(MOUNTS[args.mount], args.pitch_trim)
@@ -225,6 +241,11 @@ def main() -> None:
             else:
                 pos = arm.position(pkt.hand, head_pos, head_rot, rot)
             vmt.pose(pkt.hand, h.enable, pos, rot)
+            if phone_sock:
+                try:
+                    phone_sock.sendto(phone_packet(pkt.hand, pos, rot), (args.phone, PHONE_PORT))
+                except OSError:
+                    pass   # phone not reachable yet; keep going
 
             b, changed = pkt.buttons, pkt.buttons ^ h.prev_buttons
             for bit, idx in ((P.BTN_A, V.BUTTON_A), (P.BTN_B, V.BUTTON_B)):

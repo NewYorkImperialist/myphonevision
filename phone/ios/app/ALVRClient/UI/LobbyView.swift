@@ -191,6 +191,7 @@ struct LobbyView: View {
                     viewModel.saveSettings()
                     vr.save()
                     Renderer.shared?.testMode = false
+                    Renderer.shared?.saberMode = false
                     EventHandler.shared.setWorldTrackingParams(isTrackOrientation: !viewModel.isDontTrackOrientation, isTrackPosition: !viewModel.isDontTrackPosition)
                     EventHandler.shared.start()
                 }
@@ -201,6 +202,7 @@ struct LobbyView: View {
                 Button("Test mode (no server)") {
                     UIApplication.shared.isIdleTimerDisabled = true
                     vr.save()
+                    Renderer.shared?.saberMode = false
                     Renderer.shared?.testMode = true
                     EventHandler.shared.setWorldTrackingParams(isTrackOrientation: true, isTrackPosition: true)
                     isPresentedLobby.wrappedValue = false
@@ -208,6 +210,21 @@ struct LobbyView: View {
                 }
 
                 Text("A test room through the lens pass, tracked by ARKit. Tap to recenter; hold 1 s to come back here.")
+                    .fontWeight(.light)
+
+                Button("Sword game (no SteamVR)") {
+                    UIApplication.shared.isIdleTimerDisabled = true
+                    vr.save()
+                    HandReceiver.shared.start()
+                    Renderer.shared?.saberGame.reset()
+                    Renderer.shared?.saberMode = true
+                    Renderer.shared?.testMode = true
+                    EventHandler.shared.setWorldTrackingParams(isTrackOrientation: true, isTrackPosition: true)
+                    isPresentedLobby.wrappedValue = false
+                    isPresentedLobby.update()
+                }
+
+                Text("The phone runs the sword game itself. On the laptop: python -m myphonevision_bridge --no-hmd --phone 172.20.10.1. Face forward and tap to recenter, hold each thumbstick 1 s to line up that hand, hold the screen 1 s to come back here.")
                     .fontWeight(.light)
             }
 
