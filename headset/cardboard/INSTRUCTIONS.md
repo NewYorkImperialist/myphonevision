@@ -1,5 +1,7 @@
 # Cardboard headset: iPhone 16 Pro + two Carson TriView TV-36
 
+**Picture guide:** [build-guide.pdf](build-guide.pdf) (step pictures for the laser-cut parts; sources in `guide/`).
+
 A flat-pack cardboard box that holds the phone, two whole TV-36 magnifiers set to **5.5x** (top and bottom lenses swung out, middle lens left in the case; cases sticking up through the top) and a strap. Print `template.pdf`, stick the pages on corrugated card, cut, slot together, tape.
 
 **Time:** about 2 to 2.5 hours with 2 or 3 people (1 h cutting in parallel, 40 min assembly, 30 min fitting and focus). About 3.5 hours alone.
