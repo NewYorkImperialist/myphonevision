@@ -8,6 +8,7 @@ Every hit buzzes the controller. No buttons needed.
 
     python saber_playground.py                      # SteamVR (headset + bridge running)
     python saber_playground.py --desktop            # no headset: the mouse swings the right blade
+                                                    #   (hold the left mouse button for the left one)
     python saber_playground.py --desktop --autoplay # both blades swing by themselves
 
 Keys, on the laptop window: T toggles thrown cubes, R resets, C changes blade
@@ -39,7 +40,30 @@ COLOR_SETS = [
     ((1.0, 0.75, 0.1), (0.1, 0.9, 1.0)),
 ]
 SLICE_SPEED = 1.5      # m/s at the contact point; slower only pushes
-HILT_BACK, HILT_FRONT = 0.10, 0.14  # hilt extent along the blade from the controller origin
+HILT_BACK = 0.12    # hilt bottom, behind the controller origin (which sits in the grip)
+HILT_LEN = 0.271
+HILT_FRONT = HILT_LEN - HILT_BACK  # emitter mouth, ahead of the controller origin
+
+# Hilt materials: rgb + a, where a > 0 is glow (emissive) and a < 0 is metal (shine).
+CHROME = (0.82, 0.84, 0.88, -1.0)
+STEEL = (0.5, 0.52, 0.56, -0.8)
+GUNMETAL = (0.13, 0.13, 0.15, -0.5)
+RUBBER = (0.035, 0.035, 0.04, 0.0)
+RIB = (0.07, 0.07, 0.075, -0.25)
+# Turned sections along the hilt: (mesh, from, to, radius, material), meters from the pommel.
+HILT_PARTS = [
+    ("cyl", 0.000, 0.006, 0.0165, GUNMETAL),   # pommel cap
+    ("cyl", 0.006, 0.030, 0.0190, STEEL),      # pommel
+    ("cyl", 0.030, 0.036, 0.0176, CHROME),
+    ("cyl", 0.036, 0.135, 0.0158, RUBBER),     # grip
+    *[("cyl", 0.040 + i * 0.0123, 0.0455 + i * 0.0123, 0.0177, RIB) for i in range(8)],  # grip ribs
+    ("cyl", 0.135, 0.145, 0.0183, CHROME),
+    ("cyl", 0.145, 0.200, 0.0168, STEEL),      # switch section
+    ("cyl", 0.200, 0.207, 0.0183, CHROME),
+    ("cyl", 0.207, 0.236, 0.0150, GUNMETAL),   # emitter neck
+    ("flare", 0.236, 0.266, 0.0168, CHROME),   # emitter shroud, flares out 27%
+    ("cyl", 0.266, 0.271, 0.0212, CHROME),     # emitter lip
+]
 IGNITE_S = 0.25
 FLOAT_COUNT = 9
 THROW_EVERY_S = 1.1
@@ -165,8 +189,19 @@ void main() {
   vec3 V = normalize(uEye - vW);
   float diff = max(dot(n, normalize(vec3(0.35, 1.0, 0.25))), 0.0) * 0.55 + 0.18;
   float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0) * 0.35;
-  vec3 lit = vC.rgb * (diff + rim + bladeLight(vW, n));
-  frag = vec4(fogged(mix(lit, vC.rgb * 1.6, vC.a), vW), 1.0);
+  vec3 col;
+  if (vC.a < 0.0) {  // metal: mirror-ish reflection of a dim room with a bright horizon, plus blade light
+    float metal = -vC.a;
+    vec3 r = reflect(-V, n);
+    vec3 env = mix(vec3(0.03, 0.035, 0.06), vec3(0.06, 0.07, 0.11), step(0.0, r.y))
+             + vec3(0.55, 0.6, 0.7) * exp(-abs(r.y) * 14.0) * 0.7
+             + vec3(1.0) * pow(max(dot(r, normalize(vec3(0.35, 1.0, 0.25))), 0.0), 60.0) * 1.5;
+    vec3 bl = min(bladeLight(vW, n), vec3(0.9));
+    col = vC.rgb * (diff * (1.0 - metal * 0.7) + env * metal * 1.6 + bl * 0.8) + rim * vC.rgb * 0.5;
+  } else {
+    col = mix(vC.rgb * (diff + rim + bladeLight(vW, n)), vC.rgb * 1.6, vC.a);
+  }
+  frag = vec4(fogged(col, vW), 1.0);
 }
 """
 
@@ -257,6 +292,29 @@ def capsule_mesh(seg=16, rings=6):
         for j in range(seg):
             a, b = r * (seg + 1) + j, (r + 1) * (seg + 1) + j
             idx += [a, b, a + 1, a + 1, b, b + 1]
+    return np.array(verts, np.float32), np.array(idx, np.uint32)
+
+
+def cylinder_mesh(seg=28, top_ratio=1.0):
+    """Flat-capped cylinder (or flared, top radius x top_ratio): base at y=0, top at y=length."""
+    verts, idx = [], []
+    slope = (1.0 - top_ratio) * 0.6
+    for j in range(seg + 1):
+        a = 2 * math.pi * j / seg
+        c, sn = math.cos(a), math.sin(a)
+        n = normalize(np.array([c, slope, sn]))
+        verts.append([c, 0, sn, *n, 0.0])
+        verts.append([c * top_ratio, 0, sn * top_ratio, *n, 1.0])
+    for j in range(seg):
+        a = 2 * j
+        idx += [a, a + 1, a + 2, a + 2, a + 1, a + 3]
+    for s_, ny, r in ((0.0, -1.0, 1.0), (1.0, 1.0, top_ratio)):
+        center = len(verts)
+        verts.append([0, 0, 0, 0, ny, 0, s_])
+        for j in range(seg + 1):
+            a = 2 * math.pi * j / seg
+            verts.append([math.cos(a) * r, 0, math.sin(a) * r, 0, ny, 0, s_])
+        idx += [i for j in range(seg) for i in (center, center + 1 + j, center + 2 + j)]
     return np.array(verts, np.float32), np.array(idx, np.uint32)
 
 
@@ -375,6 +433,7 @@ class Blade:
         self.a = self.b = self.prev_a = self.prev_b = np.zeros(3)
         self.d = np.array([0, 1.0, 0])
         self.origin = np.zeros(3)
+        self.R_ctrl = np.eye(3)
         self.trail: list = []
         self.haptic_frames = 0
 
@@ -489,7 +548,7 @@ class Game:
             b.trail.clear()
             return
         d = normalize(M[:3, :3] @ self.blade_dir_local)
-        b.origin, b.d = M[:3, 3].copy(), d
+        b.origin, b.d, b.R_ctrl = M[:3, 3].copy(), d, M[:3, :3].copy()
         b.length = min(self.blade_length, b.length + self.blade_length * dt / IGNITE_S)
         a = b.origin + d * HILT_FRONT
         if not b.valid:
@@ -607,7 +666,8 @@ class Game:
         self.spark_life, self.spark_col = self.spark_life[keep], self.spark_col[keep]
 
     # -- drawing --
-    def build(self, solid_cubes, solid_caps, glow_caps):
+    def build(self, r):
+        solid_cubes, solid_caps, glow_caps = r.cubes, r.caps, r.glows
         for tg in self.targets:
             s = min(1.0, tg.age / 0.3) * tg.size / 2
             solid_cubes.add(mat4(tg.R, tg.pos), np.full(3, s), 0.0, (*tg.color, 0.12))
@@ -618,14 +678,12 @@ class Game:
             if not b.valid:
                 continue
             R = basis_from_y(b.d)
-            solid_caps.add(mat4(R, b.origin - b.d * HILT_BACK), np.full(3, 0.018), HILT_BACK + HILT_FRONT - 0.02,
-                           (0.28, 0.3, 0.34, 0.0))
-            solid_caps.add(mat4(R, b.a - b.d * 0.02), np.full(3, 0.023), 0.02, (0.6, 0.62, 0.66, 0.0))
+            self.build_hilt(r, b)
             core = np.clip(b.color * 0.35 + 0.65, 0, 1)
             M = mat4(R, b.a)
             solid_caps.add(M, np.full(3, 0.011), b.length, (*core, 1.0))
-            for r, k in ((0.022, 0.5), (0.04, 0.22), (0.075, 0.09)):
-                glow_caps.add(M, np.full(3, r), b.length, (*b.color, k))
+            for rad, k in ((0.022, 0.5), (0.04, 0.22), (0.075, 0.09)):
+                glow_caps.add(mat4(R, b.a + b.d * rad), np.full(3, rad), max(0.0, b.length - rad), (*b.color, k))
             for i, (ta, tb) in enumerate(b.trail[1:]):
                 seg = tb - ta
                 L = float(np.linalg.norm(seg))
@@ -648,6 +706,31 @@ class Game:
             rows[:, 23] = np.clip(self.spark_life * 2.5, 0, 1)
             glow_caps.add_array(rows)
         self.build_world(solid_cubes)
+
+    @staticmethod
+    def build_hilt(r, b):
+        # Hilt frame: y along the blade, z toward the controller's top (thumb side), so the
+        # switch plate and button roll with the hand.
+        d = b.d
+        cx = b.R_ctrl[:, 0]
+        x = cx - np.dot(cx, d) * d
+        x = normalize(x) if np.linalg.norm(x) > 1e-3 else basis_from_y(d)[:, 0]
+        z = np.cross(x, d)
+        R = np.column_stack((x, d, z))
+        base = b.origin - d * HILT_BACK
+        for mesh, y0, y1, rad, mat in HILT_PARTS:
+            (r.flares if mesh == "flare" else r.cyls).add(mat4(R, base + d * y0), np.full(3, rad), y1 - y0, mat)
+        # Switch plate, activation button and a small status light on the thumb side.
+        r.cubes.add(mat4(R, base + d * 0.1725 + z * 0.0172), (0.0055, 0.0165, 0.0032), 0.0, GUNMETAL)
+        R_btn = np.column_stack((x, z, -d))
+        r.cyls.add(mat4(R_btn, base + d * 0.180 + z * 0.0200), np.full(3, 0.0034), 0.0028, (0.9, 0.08, 0.05, 0.35))
+        r.cubes.add(mat4(R, base + d * 0.160 + z * 0.0205), (0.0022, 0.0022, 0.0008), 0.0, (*b.color, 1.0))
+        # Small vents around the emitter neck.
+        for k in range(6):
+            a = 2 * math.pi * k / 6
+            rad_dir = x * math.cos(a) + z * math.sin(a)
+            Rv = np.column_stack((np.cross(d, rad_dir), d, rad_dir))
+            r.cubes.add(mat4(Rv, base + d * 0.2215 + rad_dir * 0.0148), (0.0022, 0.009, 0.0012), 0.0, (0.01, 0.01, 0.012, 0.0))
 
     def build_world(self, cubes):
         if self.anchor is None:
@@ -701,6 +784,7 @@ class Renderer:
         self.glow = compile_program(VS_INST, FS_GLOW)
         self.floor = compile_program(VS_FLOOR, FS_FLOOR)
         self.cubes, self.caps, self.glows = Batch(cube_mesh()), Batch(capsule_mesh()), Batch(capsule_mesh())
+        self.cyls, self.flares = Batch(cylinder_mesh()), Batch(cylinder_mesh(top_ratio=1.27))
         quad = np.array([[-40, 0, -40], [40, 0, -40], [40, 0, 40], [-40, 0, -40], [40, 0, 40], [-40, 0, 40]], np.float32)
         self.floor_vao = gl.glGenVertexArrays(1)
         gl.glBindVertexArray(self.floor_vao)
@@ -712,8 +796,8 @@ class Renderer:
         gl.glBindVertexArray(0)
 
     def prepare(self, game):
-        game.build(self.cubes, self.caps, self.glows)
-        for b in (self.cubes, self.caps, self.glows):
+        game.build(self)
+        for b in (self.cubes, self.caps, self.glows, self.cyls, self.flares):
             b.upload()
         self.blades = game.blade_uniforms()
         self.center = game.anchor[0] if game.anchor else np.zeros(3)
@@ -745,6 +829,8 @@ class Renderer:
         self._uniforms(self.lit, VP, eye)
         self.cubes.draw()
         self.caps.draw()
+        self.cyls.draw()
+        self.flares.draw()
         self._uniforms(self.glow, VP, eye)
         gl.glDepthMask(gl.GL_FALSE)
         gl.glEnable(gl.GL_BLEND)
@@ -793,10 +879,12 @@ class MouseHands:
         origin = pos + f * 0.45 + right * (m[0] * 0.55) + np.array([0, -0.4 + m[1] * 0.45, 0])
         lean = np.clip(self.vel * 0.35, -2.5, 2.5)
         d = np.array([0, 1.0, 0]) * 0.8 + f * 0.6 + right * lean[0] + np.array([0, lean[1] * 0.5, 0])
-        right_hand = hand_matrix(origin, d, local_dir)
-        idle = pos + f * 0.35 - right * 0.3 + np.array([0, -0.5, 0])
-        left_hand = hand_matrix(idle, np.array([0, 1.0, 0]) + f * 0.5 + right * 0.15 * math.sin(t), local_dir)
-        return [left_hand, right_hand]
+        driven = hand_matrix(origin, d, local_dir)
+        swap = glfw.get_mouse_button(win, glfw.MOUSE_BUTTON_LEFT) == glfw.PRESS
+        side = 1 if swap else -1  # the idle hand rests on the other side
+        idle = pos + f * 0.35 + right * 0.3 * side + np.array([0, -0.5, 0])
+        idle_hand = hand_matrix(idle, np.array([0, 1.0, 0]) + f * 0.5 + right * 0.15 * math.sin(t), local_dir)
+        return [driven, idle_hand] if swap else [idle_hand, driven]
 
 
 # ---- Main loops ---------------------------------------------------------------------
