@@ -331,7 +331,8 @@ final class Renderer {
     private var propsVersion = -1
     /// 360 backgrounds by scene: 0 neon grid (none), 1 forest, 2 space, 3 Moon, 4 volcano, 5 study (the forest outside its window).
     static let sceneNames = ["", "scene_forest", "scene_space", "scene_moon", "scene_volcano", "scene_forest", "",   // 6: tightrope (drawn, no photo)
-                             "scene_mars", "scene_grotto", "scene_canyon", "scene_nightsky"]
+                             "scene_mars", "scene_grotto", "scene_canyon", "scene_nightsky",
+                             "scene_space"]   // 11: the Apollo 11 cockpit scan, with space outside its windows
 
     /// The 360 background for a scene, loaded from the asset catalog the first time it's used.
     private func panoTexture(_ id: Int) -> MTLTexture {
@@ -351,6 +352,9 @@ final class Renderer {
         return tex
     }
     private var saberEyesPipelineState: MTLRenderPipelineState?
+    private var meshEyesPipelineState: MTLRenderPipelineState?
+    private var mesh: MeshScene?
+    private var meshTried = false
     private var testEyesPipelineState: MTLRenderPipelineState?
     private var frameRGBPipelineState: MTLRenderPipelineState?
     private var testEyesTexture: MTLTexture?
@@ -365,6 +369,8 @@ final class Renderer {
                                                                                  secondColorFormat: .r16Float)
             saberEyesPipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrSaberEyes",
                                                                                   secondColorFormat: .r16Float)
+            meshEyesPipelineState = try? Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrMeshEyes",
+                                                                                 secondColorFormat: .r16Float)
             frameRGBPipelineState = try! Renderer.buildRenderPipelineWithDevice(device: metalDevice, fragment: "vrStreamRGB")
             let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: globalPixelFormat, width: 2048, height: 1024, mipmapped: false)
             desc.usage = [.renderTarget, .shaderRead]
@@ -411,7 +417,17 @@ final class Renderer {
         eyesPass.colorAttachments[1].storeAction = .store
         if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: eyesPass) {
             encoder.label = "Test eyes"
-            encoder.setRenderPipelineState(saberMode ? saberEyesPipelineState! : testEyesPipelineState!)
+            if saberMode && saberGame.sceneId == 11 && !meshTried { meshTried = true; mesh = MeshScene.load(device: metalDevice, queue: metalCommandQueue) }
+            let useMesh = saberMode && saberGame.sceneId == 11 && mesh != nil && meshEyesPipelineState != nil
+            encoder.setRenderPipelineState(useMesh ? meshEyesPipelineState! : saberMode ? saberEyesPipelineState! : testEyesPipelineState!)
+            if useMesh, let mesh {
+                encoder.setFragmentAccelerationStructure(mesh.accel, bufferIndex: 4)
+                encoder.setFragmentBuffer(mesh.vertices, offset: 0, index: 5)
+                encoder.setFragmentBuffer(mesh.indices, offset: 0, index: 6)
+                encoder.setFragmentBuffer(mesh.materials, offset: 0, index: 7)
+                encoder.useResource(mesh.vertices, usage: .read, stages: .fragment)
+                for k in 0..<4 { encoder.setFragmentTexture(namedTexture("apollo_tex\(min(k, mesh.textureCount - 1))"), index: 3 + k) }
+            }
             encoder.setFragmentBytes(&renderUniforms, length: MemoryLayout<VRUniforms>.stride, index: 0)
             encoder.setFragmentBytes(&frameUniforms, length: MemoryLayout<VRFrameUniforms>.stride, index: 1)
             if saberMode {
@@ -1330,5 +1346,53 @@ enum Jumpscare {
             }
             AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
         }
+    }
+}
+
+
+/// A triangle mesh drawn with hardware ray tracing (the Apollo 11 cockpit scan): the
+/// "apollo_mesh" data asset ("MPVM" v1: counts, then x y z u v per vertex, uint32 indices,
+/// one uint8 texture index per triangle) and textures "apollo_tex0"... in the asset catalog.
+final class MeshScene {
+    let vertices: MTLBuffer, indices: MTLBuffer, materials: MTLBuffer
+    let accel: MTLAccelerationStructure
+    let textureCount: Int
+
+    private init(vertices: MTLBuffer, indices: MTLBuffer, materials: MTLBuffer, accel: MTLAccelerationStructure, textureCount: Int) {
+        self.vertices = vertices; self.indices = indices; self.materials = materials
+        self.accel = accel; self.textureCount = textureCount
+    }
+
+    static func load(device: MTLDevice, queue: MTLCommandQueue) -> MeshScene? {
+        guard device.supportsRaytracing, let data = NSDataAsset(name: "apollo_mesh")?.data, data.count > 20,
+              data.prefix(4) == Data("MPVM".utf8) else { return nil }
+        func u32(_ at: Int) -> Int { Int(data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: at, as: UInt32.self) }) }
+        let nv = u32(8), nt = u32(12), ntex = max(1, u32(16))
+        let vOff = 20, iOff = vOff + nv * 20, mOff = iOff + nt * 12
+        guard data.count >= mOff + nt else { return nil }
+        let bytes: (Int, Int) -> MTLBuffer? = { off, len in
+            data.withUnsafeBytes { device.makeBuffer(bytes: $0.baseAddress! + off, length: max(len, 16), options: .storageModeShared) }
+        }
+        guard let vb = bytes(vOff, nv * 20), let ib = bytes(iOff, nt * 12), let mb = bytes(mOff, nt) else { return nil }
+        let geo = MTLAccelerationStructureTriangleGeometryDescriptor()
+        geo.vertexBuffer = vb
+        geo.vertexStride = 20
+        geo.vertexFormat = .float3
+        geo.indexBuffer = ib
+        geo.indexType = .uint32
+        geo.triangleCount = nt
+        geo.opaque = true
+        let desc = MTLPrimitiveAccelerationStructureDescriptor()
+        desc.geometryDescriptors = [geo]
+        let sizes = device.accelerationStructureSizes(descriptor: desc)
+        guard let accel = device.makeAccelerationStructure(size: sizes.accelerationStructureSize),
+              let scratch = device.makeBuffer(length: sizes.buildScratchBufferSize, options: .storageModePrivate),
+              let cb = queue.makeCommandBuffer(), let enc = cb.makeAccelerationStructureCommandEncoder() else { return nil }
+        enc.build(accelerationStructure: accel, descriptor: desc, scratchBuffer: scratch, scratchBufferOffset: 0)
+        enc.endEncoding()
+        cb.commit()
+        cb.waitUntilCompleted()
+        print("MeshScene: \(nv) vertices, \(nt) triangles, \(ntex) textures")
+        return MeshScene(vertices: vb, indices: ib, materials: mb, accel: accel, textureCount: ntex)
     }
 }

@@ -59,6 +59,7 @@ button.big{background:#3a7bd5;font-size:16px;padding:10px 16px}button.scn{backgr
 <button class="scn" onclick="post('/command',{cmd:16})">Tightrope (city)</button>
 <button class="scn" onclick="post('/command',{cmd:47})">Mars</button><button class="scn" onclick="post('/command',{cmd:48})">Blue Grotto</button>
 <button class="scn" onclick="post('/command',{cmd:49})">Valley of Desolation</button><button class="scn" onclick="post('/command',{cmd:50})">Night sky</button>
+<button class="scn" onclick="post('/command',{cmd:51})">Apollo 11 cockpit (3D)</button>
 </div>
 <div class="row"><div><img id="cam" style="width:960px;max-width:100%;aspect-ratio:2/1;background:#05060c;border-radius:10px;display:block;image-rendering:auto" alt="">
 <div class="stat" id="camstat">video: waiting for the phone</div>

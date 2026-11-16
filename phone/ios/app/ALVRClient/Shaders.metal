@@ -5,6 +5,7 @@
 // File for Metal kernel and shader functions
 
 #include <metal_stdlib>
+#include <metal_raytracing>
 #include <simd/simd.h>
 
 // Including header shared between this Metal shader code and Swift/C code executing Metal API commands
@@ -970,4 +971,83 @@ fragment TestEyesOut vrSaberEyes(TextureMappingVertex in [[ stage_in ]],
 fragment half4 monitorCopy(TextureMappingVertex in [[ stage_in ]], texture2d<float> eyes [[ texture(0) ]]) {
     constexpr sampler s(filter::linear, address::clamp_to_edge);
     return half4(eyes.sample(s, in.textureCoordinate));
+}
+
+
+// ---- Mesh scenes (the Apollo 11 cockpit scan): hardware ray tracing --------------------
+// A triangle acceleration structure (buffer 4) over the model's vertices (buffer 5: x y z u v
+// per vertex), indices (6) and a texture index per triangle (7). The model's frame is the
+// play area's (its origin is the floor under where you stood at the last recenter, -z ahead);
+// photo textures are shown unlit, since the scan's lighting is baked into them.
+fragment TestEyesOut vrMeshEyes(TextureMappingVertex in [[ stage_in ]],
+                                constant VRUniforms &u [[ buffer(0) ]],
+                                constant VRFrameUniforms &f [[ buffer(1) ]],
+                                constant float4 *scene [[ buffer(2) ]],
+                                raytracing::primitive_acceleration_structure accel [[ buffer(4) ]],
+                                device const float *verts [[ buffer(5) ]],
+                                device const uint *idx [[ buffer(6) ]],
+                                device const uchar *mats [[ buffer(7) ]],
+                                texture2d<float> pano [[ texture(0) ]],
+                                texture2d<float> scare [[ texture(2) ]],
+                                texture2d<float> t0 [[ texture(3) ]],
+                                texture2d<float> t1 [[ texture(4) ]],
+                                texture2d<float> t2 [[ texture(5) ]],
+                                texture2d<float> t3 [[ texture(6) ]]) {
+    float2 uvs = in.textureCoordinate;
+    int eye = uvs.x < 0.5 ? 0 : 1;
+    float4 fov = f.fovTan[eye];
+    float2 local = float2(fract(uvs.x * 2.0), uvs.y);
+    float2 tanAngle = float2(mix(fov.x, fov.y, local.x), mix(fov.z, fov.w, local.y));
+    float3 eyeInHead = float3((eye == 0 ? -0.0005 : 0.0005) * u.lens.w, 0.0, 0.0);
+    float3 roW = (u.headToWorld * float4(eyeInHead, 1.0)).xyz;
+    float3 rdW = normalize((u.headToWorld * float4(normalize(float3(tanAngle, -1.0)), 0.0)).xyz);
+    // world -> the model's frame (same as the tightrope's play-area frame)
+    float yaw = scene[15].w, c = cos(yaw), s = sin(yaw);
+    float3 fwd = normalize(cross(float3(0.0, 1.0, 0.0), scene[18].xyz));
+    float2 pw = roW.xz - (scene[17].xz - fwd.xz * 3.6);
+    float3 ro = float3(pw.x * c + pw.y * s, roW.y, -pw.x * s + pw.y * c);
+    float3 rd = float3(rdW.x * c + rdW.z * s, rdW.y, -rdW.x * s + rdW.z * c);
+
+    raytracing::ray r(ro, rd, 0.005, 200.0);
+    raytracing::intersector<raytracing::triangle_data> isect;
+    isect.assume_geometry_type(raytracing::geometry_type::triangle);
+    isect.force_opacity(raytracing::forced_opacity::opaque);
+    auto hit = isect.intersect(r, accel);
+    bool tri = hit.type == raytracing::intersection_type::triangle;
+    float2 uv = float2(0.0);
+    int m = 0;
+    if (tri) {
+        uint p = hit.primitive_id;
+        float2 b = hit.triangle_barycentric_coord;
+        uint i0 = idx[3 * p], i1 = idx[3 * p + 1], i2 = idx[3 * p + 2];
+        float2 a0 = float2(verts[i0 * 5 + 3], verts[i0 * 5 + 4]);
+        float2 a1 = float2(verts[i1 * 5 + 3], verts[i1 * 5 + 4]);
+        float2 a2 = float2(verts[i2 * 5 + 3], verts[i2 * 5 + 4]);
+        uv = a0 * (1.0 - b.x - b.y) + a1 * b.x + a2 * b.y;
+        uv.y = 1.0 - uv.y;                                   // OBJ v points up; textures start at the top
+        m = int(mats[p]);
+    }
+    float2 dx = dfdx(uv), dy = dfdy(uv);                       // slopes before any branching
+    dx = clamp(dx, -0.05, 0.05); dy = clamp(dy, -0.05, 0.05);  // across a triangle edge they can jump
+    float3 col;
+    float distance;
+    if (tri) {
+        float4 tc = m == 0 ? t0.sample(panoSampler, uv, gradient2d(dx, dy)) :
+                    m == 1 ? t1.sample(panoSampler, uv, gradient2d(dx, dy)) :
+                    m == 2 ? t2.sample(panoSampler, uv, gradient2d(dx, dy)) :
+                             t3.sample(panoSampler, uv, gradient2d(dx, dy));
+        col = tc.rgb * 1.08;
+        distance = hit.distance;
+    } else {                                                  // out of the windows: space
+        float pu = fract(0.5 + atan2(rd.x, -rd.z) * (0.5 / M_PI_F));
+        float pv = acos(clamp(rd.y, -1.0, 1.0)) / M_PI_F;
+        col = pano.sample(panoSampler, float2(pu, pv), level(0.0)).rgb;
+        distance = 1e4;
+    }
+    float js = scene[16].w;
+    if (js >= 0.0 && js < 1.6) { col = jumpscare(tanAngle, eye == 0 ? -1.0 : 1.0, js, scene[2].w > 0.5, scene[3].w > 0.5, scare); distance = 0.3; }
+    TestEyesOut out;
+    out.color = half4(half3(col), 1.0);
+    out.distance = distance;
+    return out;
 }

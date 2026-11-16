@@ -180,7 +180,7 @@ struct LobbyView: View {
     @State private var sceneChoice = UserDefaults.standard.integer(forKey: "vrScene")
     static let sceneChoices: [(Int, String)] = [(0, "Sword game (neon grid)"), (1, "Forest"), (2, "Space"), (3, "Moon (Apollo 17)"),
                                                 (4, "Volcano (Kīlauea)"), (6, "Tightrope over the city"), (7, "Mars (Jezero crater)"),
-                                                (8, "Blue Grotto (cave waterfall)"), (9, "Valley of Desolation"), (10, "Night sky over the telescopes")]
+                                                (8, "Blue Grotto (cave waterfall)"), (9, "Valley of Desolation"), (10, "Night sky over the telescopes"), (11, "Apollo 11 cockpit (Smithsonian scan)")]
 
     var body: some View {
         List {
@@ -237,7 +237,7 @@ struct LobbyView: View {
             }
 
             Section("Credits") {
-                Text("Forest, Blue Grotto, Valley of Desolation: Poly Haven (CC0). Space: NASA/Goddard Space Flight Center Scientific Visualization Studio; Gaia DR2: ESA/Gaia/DPAC. Moon: NASA, Apollo 17. Mars: NASA/JPL-Caltech/ASU/MSSS, layout by Peter Wieden. Volcano: USGS photo by M. Patrick. Night sky: CTIO/NOIRLab/NSF/AURA/T. Slovinský (CC BY 4.0). Jumpscare creature: \"3D Horror Game Monster\" by HorrorGameMaker.com (CC0).")
+                Text("Forest, Blue Grotto, Valley of Desolation: Poly Haven (CC0). Space: NASA/Goddard Space Flight Center Scientific Visualization Studio; Gaia DR2: ESA/Gaia/DPAC. Moon: NASA, Apollo 17. Mars: NASA/JPL-Caltech/ASU/MSSS, layout by Peter Wieden. Volcano: USGS photo by M. Patrick. Night sky: CTIO/NOIRLab/NSF/AURA/T. Slovinský (CC BY 4.0). Jumpscare creature: \"3D Horror Game Monster\" by HorrorGameMaker.com (CC0). Apollo 11 Command Module interior: Smithsonian National Air and Space Museum (CC0).")
                     .font(.footnote)
             }
 
