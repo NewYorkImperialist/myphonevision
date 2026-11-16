@@ -838,6 +838,10 @@ final class HandReceiver {
             }
             guard n >= 36, buf[0] == 0x4D, buf[1] == 0x50, buf[2] == 0x56, buf[3] == 0x48 else { continue }
             let hand = Int(buf[4])
+            if hand == 255 {   // keepalive from the bridge with no controllers: admin commands and the video's return address only
+                lock.lock(); commandBytes = (buf[6], buf[7]); sender = from; haveSender = true; lock.unlock()
+                continue
+            }
             guard hand == 0 || hand == 1 else { continue }
             let f: [Float] = buf.withUnsafeBytes { raw in (0..<7).map { raw.loadUnaligned(fromByteOffset: 8 + 4 * $0, as: Float.self) } }
             var m = simd_float4x4(simd_normalize(simd_quatf(ix: f[4], iy: f[5], iz: f[6], r: f[3])))

@@ -183,6 +183,8 @@ def main() -> None:
     src = ap.add_mutually_exclusive_group()
     src.add_argument("--serial", help="hub serial port (default: auto-detect)")
     src.add_argument("--udp", type=int, metavar="PORT", help="listen for UDP controllers instead")
+    src.add_argument("--no-controllers", action="store_true",
+                     help="no hub: only the admin page and the phone link (scenes, jumpscare, video) with --phone")
     ap.add_argument("--vmt-host", default="127.0.0.1")
     ap.add_argument("--no-hmd", action="store_true", help="don't query SteamVR; assume a fixed head")
     ap.add_argument("--mount", choices=sorted(MOUNTS), default="flat-x-forward")
@@ -198,7 +200,10 @@ def main() -> None:
     args = ap.parse_args()
 
     packets: "queue.Queue[P.ControllerPacket]" = queue.Queue()
-    if args.udp is not None:
+    if args.no_controllers:
+        source = UdpSource(0, packets)   # nothing will arrive; keeps the loop below unchanged
+        print("No controllers: admin page and phone link only")
+    elif args.udp is not None:
         source = UdpSource(args.udp, packets)
         print(f"Listening for UDP controllers on {args.udp}")
     else:
@@ -223,6 +228,14 @@ def main() -> None:
     tuner = Tuner() if args.phone else None
     if tuner:
         tuner.serve()
+        def keepalive() -> None:   # admin commands reach the phone even when no controller packets flow
+            while True:
+                try:
+                    phone_sock.sendto(phone_packet(255, (0.0, 0.0, 0.0), Q.IDENTITY, tuner.realign_bit(), tuner.command()), phone_addr)
+                except OSError:
+                    pass
+                time.sleep(0.05)
+        threading.Thread(target=keepalive, daemon=True).start()
     squeeze_to = SQUEEZE_TARGETS[args.squeeze]
     arm = ArmModel()
     mount = with_pitch_trim(MOUNTS[args.mount], args.pitch_trim)
