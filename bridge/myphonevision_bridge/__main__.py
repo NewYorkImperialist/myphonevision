@@ -8,7 +8,9 @@
 from __future__ import annotations
 
 import argparse
+import math
 import queue
+import signal
 import socket
 import struct
 import sys
@@ -24,7 +26,7 @@ from .tuner import Tuner
 
 HOLD_TO_SNAP_S = 1.0
 HOLD_TO_SYSTEM_S = 3.0  # stick hold: keep holding past the snap for a system click
-STICK_CENTERED = 0.3    # a stick hold only counts with the stick near center (not sprinting)
+STICK_CENTERED = 0.6    # a stick hold only counts without a full push (0.3 missed: a rebooted controller rests at ~0.29)
 SYSTEM_TAP_S = 0.05
 
 # What the FSR squeeze drives. Index grip grabs; the trigger selects in menus and
@@ -150,19 +152,33 @@ class StickHold:
         return None
 
 
+def parse_mount(spec: str) -> Q.Quat:
+    """A MOUNTS name, or "w,x,y,z" as measured for one controller."""
+    if spec in MOUNTS:
+        return MOUNTS[spec]
+    q = tuple(float(c) for c in spec.split(","))
+    if len(q) != 4:
+        sys.exit(f"--mount-left/right: expected a mount name or w,x,y,z, got {spec!r}")
+    return Q.normalize(q)
+
+
 class Hand:
     def __init__(self, hand: int, mount: Q.Quat) -> None:
         self.hand = hand
         self.enable = V.ENABLE_INDEX_LEFT if hand == P.HAND_LEFT else V.ENABLE_INDEX_RIGHT
         self.orient = ControllerOrientation(mount=mount)
         self.prev_buttons = 0
-        self.prev_states: tuple[bool, bool, bool] | None = None
+        self.prev_states: tuple | None = None
         self.system_down_at: float | None = None
         self.snapped = False
         self.system_release_at: float | None = None
         self.stick_hold = StickHold()
+        self.a_up_since: float | None = None  # pointing up + A held: SteamVR menu
+        self.a_up_fired = False
+        self.a_presses: list[float] = []  # triple-click A: re-aim this controller to the head
         self.count = 0
         self.last: P.ControllerPacket | None = None
+        self.last_at = 0.0
 
 
 PHONE_PORT = 39601
@@ -188,8 +204,18 @@ def main() -> None:
     ap.add_argument("--vmt-host", default="127.0.0.1")
     ap.add_argument("--no-hmd", action="store_true", help="don't query SteamVR; assume a fixed head")
     ap.add_argument("--mount", choices=sorted(MOUNTS), default="flat-x-forward")
+    ap.add_argument("--mount-left", metavar="NAME|W,X,Y,Z", help="LEFT only: a mount name, or a measured mount quaternion")
+    ap.add_argument("--mount-right", metavar="NAME|W,X,Y,Z", help="RIGHT only (write quaternions as --mount-right=-0.27,...)")
     ap.add_argument("--pitch-trim", type=float, default=0.0, metavar="DEG",
                     help="tilt the controller nose-up by this many degrees (fix hand angle in games)")
+    ap.add_argument("--pitch-trim-left", type=float, metavar="DEG", help="--pitch-trim for LEFT only")
+    ap.add_argument("--pitch-trim-right", type=float, metavar="DEG", help="--pitch-trim for RIGHT only")
+    ap.add_argument("--invert-stick-y", action="store_true",
+                    help="flip stick up/down (joystick mounted the other way round in the shell)")
+    ap.add_argument("--a-trigger-right", action="store_true",
+                    help="RIGHT's A button also pulls the trigger fully (menus select with the trigger; RIGHT's FSR is dead)")
+    ap.add_argument("--stick-turned-right", action="store_true",
+                    help="RIGHT's joystick sits turned 90 deg in its shell: forward reads +X, right reads -Y")
     ap.add_argument("--debug-follow", action="store_true",
                     help="pin both controllers 0.3 m in front of the head (checks the coordinate space)")
     ap.add_argument("--debug", action="store_true", help="print per-hand status every second")
@@ -238,9 +264,15 @@ def main() -> None:
         threading.Thread(target=keepalive, daemon=True).start()
     squeeze_to = SQUEEZE_TARGETS[args.squeeze]
     arm = ArmModel()
-    mount = with_pitch_trim(MOUNTS[args.mount], args.pitch_trim)
-    hands = {h: Hand(h, mount) for h in (P.HAND_LEFT, P.HAND_RIGHT)}
+    trims = {P.HAND_LEFT: args.pitch_trim_left, P.HAND_RIGHT: args.pitch_trim_right}
+    mounts = {P.HAND_LEFT: args.mount_left or args.mount, P.HAND_RIGHT: args.mount_right or args.mount}
+    hands = {h: Hand(h, with_pitch_trim(parse_mount(mounts[h]), args.pitch_trim if trims[h] is None else trims[h]))
+             for h in (P.HAND_LEFT, P.HAND_RIGHT)}
     start_haptic_listener(V.VMT_OUT_PORT, source.send_haptic)
+    # `kill -USR1 <pid>` from the laptop: snap both controllers to the head, like a stick hold on each.
+    pending_snap: set[int] = set()
+    last_head_yaw: float | None = None
+    signal.signal(signal.SIGUSR1, lambda *_: pending_snap.update(hands))
     next_report = time.monotonic() + 1.0
 
     while True:
@@ -252,9 +284,21 @@ def main() -> None:
 
         if pkt:
             h = hands[pkt.hand]
+            # A controller that restarts (loose battery) comes back with its heading zeroed: re-snap it.
+            if h.last and pkt.seq < 400 and now - h.last_at > 0.5:
+                pending_snap.add(pkt.hand)
+            h.last_at = now
             h.count += 1
             h.last = pkt
             head_pos, head_rot = hmd.pose()
+            # The phone's tap-to-recenter turns the head by tens of degrees in one update (a real
+            # head turn moves a few degrees per frame): re-aim both controllers with it.
+            r = Q.rotate(head_rot, (1.0, 0.0, 0.0))  # right axis: no flip when looking straight down
+            head_yaw = math.atan2(-r[2], r[0])
+            if last_head_yaw is not None and abs((head_yaw - last_head_yaw + math.pi) % (2 * math.pi) - math.pi) > math.radians(30):
+                pending_snap.update(hands)
+                print("head recentered: re-aiming both controllers")
+            last_head_yaw = head_yaw
             rot = h.orient.world(pkt.quat)
             if tuner:
                 rot = tuner.apply(pkt.hand, rot)
@@ -284,17 +328,27 @@ def main() -> None:
             # The FSR squeeze drives the grip, the trigger or both (--squeeze); a grip
             # switch, if wired, also counts.
             squeeze = max(pkt.trigger, 1.0 if b & P.BTN_GRIP else 0.0)
-            for t in squeeze_to:
-                vmt.trigger(pkt.hand, t, squeeze)
-            vmt.joystick(pkt.hand, V.JOYSTICK, pkt.stick[0], pkt.stick[1])
+            pointing_up = Q.rotate(rot, (0.0, 0.0, -1.0))[1] > 0.82  # > ~55 deg up: A is the menu gesture there
+            a_pull = args.a_trigger_right and pkt.hand == P.HAND_RIGHT
+            targets = squeeze_to if not a_pull or V.TRIGGER in squeeze_to else (*squeeze_to, V.TRIGGER)
+            levels = {t: max(squeeze if t in squeeze_to else 0.0,
+                             1.0 if a_pull and t == V.TRIGGER and b & P.BTN_A and not pointing_up else 0.0) for t in targets}
+            for t, v in levels.items():
+                vmt.trigger(pkt.hand, t, v)
+            sx, sy = pkt.stick
+            if args.stick_turned_right and pkt.hand == P.HAND_RIGHT:
+                sx, sy = -sy, sx  # already in game axes: forward +Y, right +X
+            elif args.invert_stick_y:
+                sy = -sy
+            vmt.joystick(pkt.hand, V.JOYSTICK, sx, sy)
             # Edge-triggered touch/click states derived from the analog values.
-            states = (squeeze > 0.05, squeeze > 0.9,
+            states = (tuple((v > 0.05, v > 0.9) for v in levels.values()),
                       bool(b & P.BTN_STICK) or abs(pkt.stick[0]) + abs(pkt.stick[1]) > 0)
             if states != h.prev_states:
-                for t in squeeze_to:
-                    vmt.trigger_touch(pkt.hand, t, states[0])
-                    vmt.trigger_click(pkt.hand, t, states[1])
-                vmt.joystick_touch(pkt.hand, V.JOYSTICK, states[2])
+                for t, (touch, click) in zip(levels, states[0]):
+                    vmt.trigger_touch(pkt.hand, t, touch)
+                    vmt.trigger_click(pkt.hand, t, click)
+                vmt.joystick_touch(pkt.hand, V.JOYSTICK, states[1])
                 h.prev_states = states
 
             # System: a tap is a system click; a 1 s hold snaps yaw to the head.
@@ -313,7 +367,30 @@ def main() -> None:
                 source.send_haptic(pkt.hand, 0.7, 0.15)
                 print(f"{name}: yaw snapped to head")
             # Stick hold: the same snap at 1 s, then a system click at 3 s.
+            # Triple-click A (3 presses within 1 s) while pointing ahead: re-aim this controller.
+            if changed & P.BTN_A and b & P.BTN_A and not args.phone:   # the phone game uses it to align blades
+                h.a_presses = [t for t in h.a_presses if now - t < 1.0] + [now]
+                if len(h.a_presses) >= 3:
+                    h.a_presses = []
+                    pending_snap.add(pkt.hand)
+                    print(f"{name}: triple-click A: re-aiming")
+            # Point the controller up (> ~55 deg) and hold A 1.5 s: system click (opens/closes the
+            # SteamVR menu). Needed because RIGHT's stick click isn't wired, so the stick hold can't do it.
+            if b & P.BTN_A and pointing_up:
+                if h.a_up_since is None:
+                    h.a_up_since = now
+                elif not h.a_up_fired and now - h.a_up_since >= 1.5:
+                    h.a_up_fired = True
+                    vmt.button(pkt.hand, V.BUTTON_SYSTEM, True)
+                    h.system_release_at = now + SYSTEM_TAP_S
+                    print(f"{name}: system click (point up + hold A)")
+            else:
+                h.a_up_since, h.a_up_fired = None, False
             gesture = h.stick_hold.update(bool(b & P.BTN_STICK), pkt.stick, now)
+            if pkt.hand in pending_snap:
+                pending_snap.discard(pkt.hand)
+                h.orient.snap_yaw(pkt.quat, Q.yaw(head_rot))
+                print(f"{name}: yaw snapped to head (laptop)")
             if gesture == "snap" and not args.phone:   # the phone game aligns blades itself (triple-click A)
                 h.orient.snap_yaw(pkt.quat, Q.yaw(head_rot))
                 source.send_haptic(pkt.hand, 0.7, 0.15)

@@ -65,6 +65,13 @@ def test_arm_model_puts_level_controller_in_front_and_to_the_side():
     assert turned[0] < -0.2  # head and hand turned left: hand now toward -X
 
 
+def test_arm_model_lifts_the_arm_when_pointing_sideways():
+    # Pointing level to the right, a real (near-straight) arm puts the hand near shoulder height.
+    arm = ArmModel()
+    hand = arm.position(1, (0.0, 1.6, 0.0), Q.IDENTITY, Q.rot_y(-math.pi / 2))
+    assert 1.6 - hand[1] < 0.35 and hand[0] > 0.6
+
+
 def test_arm_model_has_no_jump_when_controller_is_turned_half_way_round():
     # Twisting past 180 deg, or pointing sideways with a twist, used to flip the elbow ~53 cm.
     arm = ArmModel()
@@ -74,9 +81,9 @@ def test_arm_model_has_no_jump_when_controller_is_turned_half_way_round():
         b = arm.position(1, head, Q.IDENTITY, Q.mul(base, Q.axis_angle((0, 0, 1), math.pi + 0.02)))
         assert math.dist(a, b) < 0.02
     # Pointing straight behind has no "right" side for the elbow: nudging left vs right mustn't swing it.
-    a = arm.position(1, head, Q.IDENTITY, Q.mul(Q.rot_y(math.pi), Q.axis_angle((1, 0, 0), 0.05)))
-    b = arm.position(1, head, Q.IDENTITY, Q.mul(Q.rot_y(math.pi), Q.axis_angle((1, 0, 0), -0.05)))
-    assert math.dist(a, b) < 0.05
+    a = arm.position(1, head, Q.IDENTITY, Q.mul(Q.rot_y(math.pi), Q.axis_angle((1, 0, 0), 0.01)))
+    b = arm.position(1, head, Q.IDENTITY, Q.mul(Q.rot_y(math.pi), Q.axis_angle((1, 0, 0), -0.01)))
+    assert math.dist(a, b) < 0.02
 
 
 def test_yaw_snap_works_pointing_at_floor_and_ceiling():
@@ -126,3 +133,12 @@ def test_squeeze_targets():
     assert set(SQUEEZE_TARGETS["both"]) == {V.GRIP, V.TRIGGER}
     assert SQUEEZE_TARGETS["grip"] == (V.GRIP,)
     assert SQUEEZE_TARGETS["trigger"] == (V.TRIGGER,)
+
+
+def test_arm_model_does_not_jump_when_the_head_pitches_past_the_yaw_switch():
+    # Looking down ~64 deg with a little roll used to flip the body heading method.
+    arm = ArmModel()
+    roll = Q.axis_angle((0, 0, 1), 0.3)
+    a = arm.position(1, (0.0, 1.6, 0.0), Q.mul(Q.axis_angle((1, 0, 0), -1.11), roll), Q.IDENTITY)
+    b = arm.position(1, (0.0, 1.6, 0.0), Q.mul(Q.axis_angle((1, 0, 0), -1.13), roll), Q.IDENTITY)
+    assert math.dist(a, b) < 0.02

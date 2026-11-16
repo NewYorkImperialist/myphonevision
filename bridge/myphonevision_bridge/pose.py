@@ -32,27 +32,31 @@ MOUNTS = {
 
 @dataclass
 class ArmModel:
-    """Daydream-style arm: fixed shoulder under the head, elbow follows the
-    controller partway, forearm points along the controller."""
+    """Fixed shoulder under the head; the upper arm swings most of the way from
+    hanging down toward where the controller points; forearm along the controller."""
 
     shoulder: tuple[float, float, float] = (0.19, -0.23, 0.08)  # right side; X mirrored for left
     upper_arm: float = 0.28
     forearm: float = 0.27
-    elbow_follow: float = 0.4  # 0 = elbow hangs straight down, 1 = follows the controller fully
+    elbow_follow: float = 0.85  # 0 = upper arm hangs straight down, 1 = straight arm along the controller
     grip_offset: float = 0.05  # wrist to grip center along the controller's forward axis
 
     def position(self, hand: int, hmd_pos: Q.Vec, hmd_rot: Q.Quat, ctrl_rot: Q.Quat) -> Q.Vec:
-        body = Q.rot_y(Q.yaw(hmd_rot))
+        # Heading from the head's right axis: Q.yaw switches method past ~64 deg of head pitch,
+        # which threw the shoulders (and hands) ~36 cm when looking down.
+        r = Q.rotate(hmd_rot, (1.0, 0.0, 0.0))
+        body = Q.rot_y(math.atan2(-r[2], r[0]))
         side = -1.0 if hand == 0 else 1.0
         sx, sy, sz = self.shoulder
         shoulder = Q.add(hmd_pos, Q.rotate(body, (side * sx, sy, sz)))
-        # Elbow follows where the controller points, not its twist: slerping the full rotation
-        # flips the shortest path at 180 deg and throws the elbow ~53 cm to the other side.
-        fwd = Q.rotate(Q.conj(body), Q.rotate(ctrl_rot, (0.0, 0.0, -1.0)))
-        swing = Q.normalize((1.0 - fwd[2], fwd[1], -fwd[0], 0.0)) if fwd[2] < 0.999 else (0.0, 1.0, 0.0, 0.0)  # (0,0,-1) -> fwd; straight back: over the top
-        follow = self.elbow_follow * min(1.0, (1.0 - fwd[2]) / 0.5)  # fades to 0 within 60 deg of straight back, where the elbow has no side to pick
-        elbow_rot = Q.mul(body, Q.slerp(Q.IDENTITY, swing, follow))
-        elbow = Q.add(shoulder, Q.rotate(elbow_rot, (0.0, -self.upper_arm, 0.0)))
+        # Upper arm along a blend of straight down and where the controller points (not its twist:
+        # slerping the full rotation flipped at 180 deg and threw the elbow ~53 cm). With follow > 0.5
+        # the blend never cancels, so there's no direction where the elbow has to pick a side.
+        fwd = Q.rotate(ctrl_rot, (0.0, 0.0, -1.0))
+        f = self.elbow_follow
+        d = (f * fwd[0], f * fwd[1] - (1.0 - f), f * fwd[2])
+        n = math.sqrt(sum(c * c for c in d))
+        elbow = Q.add(shoulder, tuple(self.upper_arm * c / n for c in d))
         reach = self.forearm + self.grip_offset
         return Q.add(elbow, Q.rotate(ctrl_rot, (0.0, 0.0, -reach)))
 
