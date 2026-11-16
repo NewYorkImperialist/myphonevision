@@ -330,7 +330,8 @@ final class Renderer {
     private var propsBuffer: MTLBuffer?
     private var propsVersion = -1
     /// 360 backgrounds by scene: 0 neon grid (none), 1 forest, 2 space, 3 Moon, 4 volcano, 5 study (the forest outside its window).
-    static let sceneNames = ["", "scene_forest", "scene_space", "scene_moon", "scene_volcano", "scene_forest", ""]   // 6: tightrope (drawn, no photo)
+    static let sceneNames = ["", "scene_forest", "scene_space", "scene_moon", "scene_volcano", "scene_forest", "",   // 6: tightrope (drawn, no photo)
+                             "scene_mars", "scene_grotto", "scene_canyon", "scene_nightsky"]
 
     /// The 360 background for a scene, loaded from the asset catalog the first time it's used.
     private func panoTexture(_ id: Int) -> MTLTexture {
@@ -1028,7 +1029,11 @@ final class SaberGame {
         if let last = lastCommandSeq, cmd.seq != last {
             if cmd.id == 1 { anchored = false }            // recenter play area: cubes and scoreboard in front of the player
             if cmd.id == 2 { score = 0; combo = 0 }        // reset score
-            if (10...16).contains(cmd.id) {                                // switch scene
+            if (40...59).contains(cmd.id) {                                // switch scene (40 + scene number)
+                sceneId = Int(cmd.id) - 40
+                anchored = false
+            }
+            if (10...16).contains(cmd.id) {                                // switch scene (older numbering)
                 sceneId = Int(cmd.id) - 10
                 anchored = false                                           // lay it out in front of the player
             }

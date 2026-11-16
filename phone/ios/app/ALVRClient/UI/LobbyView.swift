@@ -179,7 +179,8 @@ struct LobbyView: View {
     @State private var addresses: [PhoneAddress] = []
     @State private var sceneChoice = UserDefaults.standard.integer(forKey: "vrScene")
     static let sceneChoices: [(Int, String)] = [(0, "Sword game (neon grid)"), (1, "Forest"), (2, "Space"), (3, "Moon (Apollo 17)"),
-                                                (4, "Volcano (Kīlauea)"), (6, "Tightrope over the city")]
+                                                (4, "Volcano (Kīlauea)"), (6, "Tightrope over the city"), (7, "Mars (Jezero crater)"),
+                                                (8, "Blue Grotto (cave waterfall)"), (9, "Valley of Desolation"), (10, "Night sky over the telescopes")]
 
     var body: some View {
         List {
@@ -233,6 +234,11 @@ struct LobbyView: View {
 
                 Text("The phone runs the sword game itself. On the laptop: python -m myphonevision_bridge --no-hmd --phone 172.20.10.1. Blades line up with where you look at the start. In the headset: point a controller where you're looking and triple-click A to line that blade up again (or Realign on the laptop's tuner page). Tap to line up everything; hold the screen 1 s to come back here.")
                     .fontWeight(.light)
+            }
+
+            Section("Credits") {
+                Text("Forest, Blue Grotto, Valley of Desolation: Poly Haven (CC0). Space: NASA/Goddard Space Flight Center Scientific Visualization Studio; Gaia DR2: ESA/Gaia/DPAC. Moon: NASA, Apollo 17. Mars: NASA/JPL-Caltech/ASU/MSSS, layout by Peter Wieden. Volcano: USGS photo by M. Patrick. Night sky: CTIO/NOIRLab/NSF/AURA/T. Slovinský (CC BY 4.0). Jumpscare creature: \"3D Horror Game Monster\" by HorrorGameMaker.com (CC0).")
+                    .font(.footnote)
             }
 
             Section("Lenses") {

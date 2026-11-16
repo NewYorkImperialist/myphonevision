@@ -57,6 +57,8 @@ button.big{background:#3a7bd5;font-size:16px;padding:10px 16px}button.scn{backgr
 <button class="scn" onclick="post('/command',{cmd:11})">Forest</button><button class="scn" onclick="post('/command',{cmd:12})">Space</button>
 <button class="scn" onclick="post('/command',{cmd:13})">Moon</button><button class="scn" onclick="post('/command',{cmd:14})">Volcano</button>
 <button class="scn" onclick="post('/command',{cmd:16})">Tightrope (city)</button>
+<button class="scn" onclick="post('/command',{cmd:47})">Mars</button><button class="scn" onclick="post('/command',{cmd:48})">Blue Grotto</button>
+<button class="scn" onclick="post('/command',{cmd:49})">Valley of Desolation</button><button class="scn" onclick="post('/command',{cmd:50})">Night sky</button>
 </div>
 <div class="row"><div><img id="cam" style="width:960px;max-width:100%;aspect-ratio:2/1;background:#05060c;border-radius:10px;display:block;image-rendering:auto" alt="">
 <div class="stat" id="camstat">video: waiting for the phone</div>
@@ -119,7 +121,7 @@ const fw=d.forward;arrow(document.getElementById("top"+h),fw[0],fw[2],colors[h])
 const pitch=Math.round(Math.asin(Math.max(-1,Math.min(1,fw[1])))*180/Math.PI);
 document.getElementById("stat"+h).innerHTML=`${d.rate} Hz · blade ${pitch>=0?"up":"down"} ${Math.abs(pitch)}° · ${d.calibrated?"calibrated":"<b style='color:#fb4;width:auto'>NOT calibrated</b>"} · A ${d.a?"down":"up"}${d.gyro?"":" · <b style='color:#f66;width:auto'>gyro drifting: power-cycle it held still</b>"}`}
 const ph=s.scene&&s.scene.age<1,ok=h=>s.hands[h]&&s.hands[h].age<0.5;
-const SN=["Sword game","Forest","Space","Moon","Volcano","Study","Tightrope"],MN=["Sword game","Explore"];
+const SN=["Sword game","Forest","Space","Moon","Volcano","Study","Tightrope","Mars","Blue Grotto","Valley of Desolation","Night sky","Apollo 11 cockpit"],MN=["Sword game","Explore"];
 document.getElementById("status").innerHTML=`Phone: ${ph?"<b style='color:#5d5;width:auto'>connected</b> · "+(SN[s.scene.scene_id]||"?"):"<b style='color:#f66;width:auto'>no game data</b>"} &nbsp; Left: ${ok(0)?s.hands[0].rate+" Hz":"off"} &nbsp; Right: ${ok(1)?s.hands[1].rate+" Hz":"off"}`;
 first=false}catch(e){}setTimeout(tick,33)}
 tick();
@@ -332,7 +334,7 @@ class Tuner:
                     with tuner.lock:
                         tuner.base[hand], tuner.calibrated[hand] = Q.IDENTITY, False
                     tuner.save()
-                elif self.path.startswith("/command") and data.get("cmd") in (1, 2, 10, 11, 12, 13, 14, 15, 16, 20, 21, 30, 31, 32, 33):
+                elif self.path.startswith("/command") and data.get("cmd") in (1, 2, 10, 11, 12, 13, 14, 15, 16, 20, 21, 30, 31, 32, 33, *range(40, 60)):
                     with tuner.lock:
                         tuner.command_id = int(data["cmd"])
                         tuner.command_seq = (tuner.command_seq + 1) % 256
