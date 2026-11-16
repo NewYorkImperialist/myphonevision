@@ -1028,7 +1028,7 @@ fragment TestEyesOut vrMeshEyes(TextureMappingVertex in [[ stage_in ]],
         m = int(mats[p]);
     }
     float2 dx = dfdx(uv), dy = dfdy(uv);                       // slopes before any branching
-    dx = clamp(dx, -0.05, 0.05); dy = clamp(dy, -0.05, 0.05);  // across a triangle edge they can jump
+    dx = clamp(dx, -0.0015, 0.0015); dy = clamp(dy, -0.0015, 0.0015);  // across a triangle edge they can jump to another texture island
     float3 col;
     float distance;
     if (tri) {
