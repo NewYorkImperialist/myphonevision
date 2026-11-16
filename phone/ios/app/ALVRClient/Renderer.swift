@@ -330,7 +330,7 @@ final class Renderer {
     private var propsBuffer: MTLBuffer?
     private var propsVersion = -1
     /// 360 backgrounds by scene: 0 neon grid (none), 1 forest, 2 space, 3 Moon, 4 volcano, 5 study (the forest outside its window).
-    static let sceneNames = ["", "scene_forest", "scene_space", "scene_moon", "scene_volcano", "scene_forest"]
+    static let sceneNames = ["", "scene_forest", "scene_space", "scene_moon", "scene_volcano", "scene_forest", ""]   // 6: tightrope (drawn, no photo)
 
     /// The 360 background for a scene, loaded from the asset catalog the first time it's used.
     private func panoTexture(_ id: Int) -> MTLTexture {
@@ -342,9 +342,10 @@ final class Renderer {
         if let tex = namedTextures[name] { return tex }
         guard let image = UIImage(named: name)?.cgImage,
               let tex = try? MTKTextureLoader(device: metalDevice).newTexture(cgImage: image, options: [
-                .SRGB: false, .generateMipmaps: false, .textureStorageMode: MTLStorageMode.private.rawValue]) else {
+                .SRGB: false, .generateMipmaps: true, .textureStorageMode: MTLStorageMode.private.rawValue]) else {
             return placeholderTexture
         }
+        if name.hasPrefix("scene_") { namedTextures = namedTextures.filter { !$0.key.hasPrefix("scene_") } }   // one 8K background at a time
         namedTextures[name] = tex
         return tex
     }
@@ -353,6 +354,8 @@ final class Renderer {
     private var frameRGBPipelineState: MTLRenderPipelineState?
     private var testEyesTexture: MTLTexture?
     private var testDistanceTexture: MTLTexture?   // virtual distance per pixel, for occlusion
+    private var sharpEyesTexture: MTLTexture?      // 3072 x 1536: the immersive scenes
+    private var sharpDistanceTexture: MTLTexture?
     private var poseHistory: [(time: Double, head: simd_float4x4)] = []
 
     func drawTestScene(drawable: CAMetalDrawable, renderPassDescriptor: MTLRenderPassDescriptor) {
@@ -368,7 +371,17 @@ final class Renderer {
             testEyesTexture = metalDevice.makeTexture(descriptor: desc)
             desc.pixelFormat = .r16Float
             testDistanceTexture = metalDevice.makeTexture(descriptor: desc)
+            let hd = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: globalPixelFormat, width: 3072, height: 1536, mipmapped: false)
+            hd.usage = [.renderTarget, .shaderRead]
+            hd.storageMode = .private
+            sharpEyesTexture = metalDevice.makeTexture(descriptor: hd)
+            hd.pixelFormat = .r16Float
+            sharpDistanceTexture = metalDevice.makeTexture(descriptor: hd)
         }
+        // Immersive scenes are cheap to draw, so they get 1.5x the pixels per eye.
+        let sharp = saberMode && saberGame.sceneId > 0
+        let eyesTex = sharp ? sharpEyesTexture : testEyesTexture
+        let distTex = sharp ? sharpDistanceTexture : testDistanceTexture
         guard let commandBuffer = metalCommandQueue.makeCommandBuffer() else { return }
         prepareCamera(commandBuffer: commandBuffer)
 
@@ -389,10 +402,10 @@ final class Renderer {
 
         // Pass 1: "the PC" renders both eyes at the delayed pose.
         let eyesPass = MTLRenderPassDescriptor()
-        eyesPass.colorAttachments[0].texture = testEyesTexture
+        eyesPass.colorAttachments[0].texture = eyesTex
         eyesPass.colorAttachments[0].loadAction = .dontCare
         eyesPass.colorAttachments[0].storeAction = .store
-        eyesPass.colorAttachments[1].texture = testDistanceTexture
+        eyesPass.colorAttachments[1].texture = distTex
         eyesPass.colorAttachments[1].loadAction = .dontCare
         eyesPass.colorAttachments[1].storeAction = .store
         if let encoder = commandBuffer.makeRenderCommandEncoder(descriptor: eyesPass) {
@@ -420,7 +433,7 @@ final class Renderer {
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
             encoder.endEncoding()
         }
-        if saberMode && saberFrame % 4 == 0, let eyes = testEyesTexture {    // monitor video, as fast as the encoder keeps up
+        if saberMode && saberFrame % 4 == 0, let eyes = eyesTex {            // monitor video, as fast as the encoder keeps up
             captureMonitor(commandBuffer: commandBuffer, eyes: eyes)
         }
         // Pass 2: the phone shows it through the lenses, reprojected to the current head.
@@ -429,8 +442,8 @@ final class Renderer {
             encoder.setRenderPipelineState(frameRGBPipelineState!)
             encoder.setFragmentBytes(&displayUniforms, length: MemoryLayout<VRUniforms>.stride, index: 0)
             encoder.setFragmentBytes(&frameUniforms, length: MemoryLayout<VRFrameUniforms>.stride, index: 1)
-            encoder.setFragmentTexture(testEyesTexture, index: 0)
-            encoder.setFragmentTexture(testDistanceTexture, index: 1)
+            encoder.setFragmentTexture(eyesTex, index: 0)
+            encoder.setFragmentTexture(distTex, index: 1)
             bindCamera(encoder: encoder, commandBuffer: commandBuffer, displayHead: displayHead, allowPassthrough: !saberMode)
             encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: 1)
             encoder.endEncoding()
@@ -948,7 +961,10 @@ final class SaberGame {
     var measureLift = [true, true]
     var aWasDown = [false, false], realignWasOn = false
     var lastCommandSeq: UInt8? = nil   // first one seen is only remembered, not run
-    var sceneId = 0                    // 0 neon grid, 1 forest, 2 space, 3 Moon, 4 volcano (admin page)
+    var sceneId = UserDefaults.standard.integer(forKey: "vrScene") {   // 0 sword game (neon grid); 1 forest, 2 space, 3 Moon, 4 volcano, 6 tightrope
+        didSet { UserDefaults.standard.set(sceneId, forKey: "vrScene") }
+    }
+    var immersive: Bool { sceneId > 0 }   // the scenes are for looking around: no blades, cubes or score
     var mode = 0                       // 0 sword game, 1 explore (no cubes or score)
     var jumpscareAt: Float? = nil      // game time the admin page's Jumpscare started
     private var propsCache: [SIMD4<Float>] = [], propsKey = "", propsVersion = 0
@@ -967,6 +983,13 @@ final class SaberGame {
     }
     var aClicks: [[Float]] = [[], []]   // recent A presses: three within 1.2 s realign that blade
     var lastTime: Double = 0
+
+    /// The settings screen's scene picker.
+    func setScene(_ id: Int) {
+        lock.lock(); defer { lock.unlock() }
+        sceneId = id
+        anchored = false
+    }
 
     /// Put the play area in front of the current head again (on tap to recenter).
     func recenter() {
@@ -1001,7 +1024,10 @@ final class SaberGame {
         if let last = lastCommandSeq, cmd.seq != last {
             if cmd.id == 1 { anchored = false }            // recenter play area: cubes and scoreboard in front of the player
             if cmd.id == 2 { score = 0; combo = 0 }        // reset score
-            if (10...15).contains(cmd.id) { sceneId = Int(cmd.id) - 10 }   // switch scene
+            if (10...16).contains(cmd.id) {                                // switch scene
+                sceneId = Int(cmd.id) - 10
+                anchored = false                                           // lay it out in front of the player
+            }
             if cmd.id == 30 { jumpscareAt = t; Jumpscare.play() }         // jumpscare
             if cmd.id == 31 { OrientationLock.lockUprightNow() }           // the way the phone sits now is upright
             if cmd.id == 32 { OrientationLock.flip() }                     // turn the picture 180°
@@ -1015,7 +1041,7 @@ final class SaberGame {
         if !anchored {   // start (or recenter): the cubes and the scoreboard go in front of where you face
             anchorPos = hp; anchorFwd = fwd; anchored = true
             cubes.removeAll(); pieces.removeAll()
-            if mode == 0 { for _ in 0..<8 { spawn() } }
+            if mode == 0 && !immersive { for _ in 0..<8 { spawn() } }
             spawnTimer = 0.35
         }
 
@@ -1088,7 +1114,8 @@ final class SaberGame {
         }
         cubes.removeAll { $0.pos.y < 0.1 || simd_length($0.pos - hp) > 8 }
         spawnTimer -= dt
-        if mode == 0 && cubes.count < 8 && spawnTimer <= 0 { spawn(); spawnTimer = 0.35 }
+        if immersive { cubes.removeAll(); pieces.removeAll() }
+        if mode == 0 && !immersive && cubes.count < 8 && spawnTimer <= 0 { spawn(); spawnTimer = 0.35 }
 
         for i in pieces.indices {
             var p = pieces[i]
@@ -1189,7 +1216,7 @@ final class SaberGame {
         var S = [SIMD4<Float>](repeating: .zero, count: 19 + SaberGame.maxBoxes * 5)
         for h in 0..<2 {
             let b = blades[h]
-            S[h] = SIMD4(b.a, b.valid ? 1 : 0)
+            S[h] = SIMD4(b.a, b.valid && !immersive ? 1 : 0)   // no blades in the immersive scenes
             S[2 + h] = SIMD4(b.b, 0)
             S[4 + h] = SIMD4(SaberGame.colors[h], 0)
             S[15 + h] = SIMD4(b.hilt, h == 0 ? atan2(anchorFwd.x, -anchorFwd.z) : 0)
@@ -1201,7 +1228,7 @@ final class SaberGame {
         }
         var board = anchorPos + anchorFwd * 3.6
         board.y = 2.75
-        S[17] = SIMD4(board, Float(mode))
+        S[17] = SIMD4(board, immersive ? 1 : Float(mode))
         S[18] = SIMD4(simd_normalize(simd_cross(anchorFwd, SIMD3(0, 1, 0))), Float(sceneId))
         var n = 0
         func box(_ pos: SIMD3<Float>, _ rot: simd_quatf, _ half: SIMD3<Float>, _ color: SIMD3<Float>, _ code: Float) {

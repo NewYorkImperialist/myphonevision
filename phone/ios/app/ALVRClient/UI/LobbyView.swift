@@ -177,6 +177,9 @@ struct LobbyView: View {
     @ObservedObject private var eventHandler = EventHandler.shared
     @State private var vr = VRSettings.current
     @State private var addresses: [PhoneAddress] = []
+    @State private var sceneChoice = UserDefaults.standard.integer(forKey: "vrScene")
+    static let sceneChoices: [(Int, String)] = [(0, "Sword game (neon grid)"), (1, "Forest"), (2, "Space"), (3, "Moon (Apollo 17)"),
+                                                (4, "Volcano (Kīlauea)"), (6, "Tightrope over the city")]
 
     var body: some View {
         List {
@@ -212,11 +215,15 @@ struct LobbyView: View {
                 Text("A test room through the lens pass, tracked by ARKit. Tap to recenter; hold 1 s to come back here.")
                     .fontWeight(.light)
 
-                Button("Sword game (no SteamVR)") {
+                Picker("Scene", selection: $sceneChoice) {
+                    ForEach(LobbyView.sceneChoices, id: \.0) { Text($0.1).tag($0.0) }
+                }
+                Button("Start scene (no SteamVR)") {
                     UIApplication.shared.isIdleTimerDisabled = true
                     vr.save()
                     HandReceiver.shared.start()
                     Renderer.shared?.saberGame.reset()
+                    Renderer.shared?.saberGame.setScene(sceneChoice)
                     Renderer.shared?.saberMode = true
                     Renderer.shared?.testMode = true
                     EventHandler.shared.setWorldTrackingParams(isTrackOrientation: true, isTrackPosition: true)

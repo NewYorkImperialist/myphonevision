@@ -52,11 +52,11 @@ button.big{background:#3a7bd5;font-size:16px;padding:10px 16px}button.scn{backgr
 <button class="big" onclick="post('/command',{cmd:31})">Set upright (lock rotation)</button>
 <button onclick="post('/command',{cmd:32})">Flip 180°</button><button onclick="post('/command',{cmd:33})">Unlock rotation</button></div>
 <div class="steps"><b style="width:auto">Scene:</b>
-<button class="scn" onclick="post('/command',{cmd:10})">Neon grid</button><button class="scn" onclick="post('/command',{cmd:11})">Forest</button>
-<button class="scn" onclick="post('/command',{cmd:12})">Space</button><button class="scn" onclick="post('/command',{cmd:13})">Moon</button>
-<button class="scn" onclick="post('/command',{cmd:14})">Volcano</button>
-&nbsp; <b style="width:auto">Mode:</b>
-<button class="scn" onclick="post('/command',{cmd:20})">Sword game</button><button class="scn" onclick="post('/command',{cmd:21})">Explore (no cubes)</button>
+<button class="scn" onclick="post('/command',{cmd:10})">Sword game (neon)</button>
+&nbsp; <b style="width:auto">Immersive (no blades):</b>
+<button class="scn" onclick="post('/command',{cmd:11})">Forest</button><button class="scn" onclick="post('/command',{cmd:12})">Space</button>
+<button class="scn" onclick="post('/command',{cmd:13})">Moon</button><button class="scn" onclick="post('/command',{cmd:14})">Volcano</button>
+<button class="scn" onclick="post('/command',{cmd:16})">Tightrope (city)</button>
 </div>
 <div class="row"><div><img id="cam" style="width:960px;max-width:100%;aspect-ratio:2/1;background:#05060c;border-radius:10px;display:block;image-rendering:auto" alt="">
 <div class="stat" id="camstat">video: waiting for the phone</div>
@@ -93,7 +93,7 @@ const P=p=>{const d=sub(p,eye),z=dot(d,f);return z<0.05?null:[W/2+dot(d,r)/z*F,H
 const seg=(a,b)=>{let pa=sub(a,eye),pb=sub(b,eye),za=dot(pa,f),zb=dot(pb,f);if(za<0.05&&zb<0.05)return null;
  if(za<0.05){const t=(0.05-za)/(zb-za);a=[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]}
  if(zb<0.05){const t=(0.05-zb)/(za-zb);b=[b[0]+(a[0]-b[0])*t,b[1]+(a[1]-b[1])*t,b[2]+(a[2]-b[2])*t]}return[P(a),P(b)]};
-const SKY=[["#04040a","#1a1030","#05060c"],["#6f9fd0","#9cb98a","#2f4a22"],["#000","#05050c","#000"],["#000","#111","#6a6a66"],["#120404","#5a1606","#1a0805"],["#d8cdb8","#c8b89a","#6a4528"]][s.scene_id]||["#04040a","#1a1030","#05060c"];
+const SKY=[["#04040a","#1a1030","#05060c"],["#6f9fd0","#9cb98a","#2f4a22"],["#000","#05050c","#000"],["#000","#111","#6a6a66"],["#120404","#5a1606","#1a0805"],["#d8cdb8","#c8b89a","#6a4528"],["#1a2350","#e0804a","#111"]][s.scene_id]||["#04040a","#1a1030","#05060c"];
 const sky=G.createLinearGradient(0,0,0,Hh);sky.addColorStop(0,SKY[0]);sky.addColorStop(0.5,SKY[1]);sky.addColorStop(1,SKY[2]);G.fillStyle=sky;G.fillRect(0,0,W,Hh);
 G.lineWidth=1;G.strokeStyle="rgba(60,100,200,0.35)";G.beginPath();const gx=Math.round(eye[0]),gz=Math.round(eye[2]);
 for(let i=-8;i<=8;i++){for(const [a,b] of [[[gx+i*0.5,0,gz-4],[gx+i*0.5,0,gz+4]],[[gx-4,0,gz+i*0.5],[gx+4,0,gz+i*0.5]]]){const q=seg(a,b);if(q){G.moveTo(q[0][0],q[0][1]);G.lineTo(q[1][0],q[1][1])}}}G.stroke();
@@ -119,8 +119,8 @@ const fw=d.forward;arrow(document.getElementById("top"+h),fw[0],fw[2],colors[h])
 const pitch=Math.round(Math.asin(Math.max(-1,Math.min(1,fw[1])))*180/Math.PI);
 document.getElementById("stat"+h).innerHTML=`${d.rate} Hz · blade ${pitch>=0?"up":"down"} ${Math.abs(pitch)}° · ${d.calibrated?"calibrated":"<b style='color:#fb4;width:auto'>NOT calibrated</b>"} · A ${d.a?"down":"up"}${d.gyro?"":" · <b style='color:#f66;width:auto'>gyro drifting: power-cycle it held still</b>"}`}
 const ph=s.scene&&s.scene.age<1,ok=h=>s.hands[h]&&s.hands[h].age<0.5;
-const SN=["Neon grid","Forest","Space","Moon","Volcano","Study"],MN=["Sword game","Explore"];
-document.getElementById("status").innerHTML=`Phone: ${ph?"<b style='color:#5d5;width:auto'>connected</b> · "+(SN[s.scene.scene_id]||"?")+" · "+(MN[s.scene.mode_id]||"?"):"<b style='color:#f66;width:auto'>no game data</b>"} &nbsp; Left: ${ok(0)?s.hands[0].rate+" Hz":"off"} &nbsp; Right: ${ok(1)?s.hands[1].rate+" Hz":"off"}`;
+const SN=["Sword game","Forest","Space","Moon","Volcano","Study","Tightrope"],MN=["Sword game","Explore"];
+document.getElementById("status").innerHTML=`Phone: ${ph?"<b style='color:#5d5;width:auto'>connected</b> · "+(SN[s.scene.scene_id]||"?"):"<b style='color:#f66;width:auto'>no game data</b>"} &nbsp; Left: ${ok(0)?s.hands[0].rate+" Hz":"off"} &nbsp; Right: ${ok(1)?s.hands[1].rate+" Hz":"off"}`;
 first=false}catch(e){}setTimeout(tick,33)}
 tick();
 </script></body></html>"""
@@ -332,7 +332,7 @@ class Tuner:
                     with tuner.lock:
                         tuner.base[hand], tuner.calibrated[hand] = Q.IDENTITY, False
                     tuner.save()
-                elif self.path.startswith("/command") and data.get("cmd") in (1, 2, 10, 11, 12, 13, 14, 15, 20, 21, 30, 31, 32, 33):
+                elif self.path.startswith("/command") and data.get("cmd") in (1, 2, 10, 11, 12, 13, 14, 15, 16, 20, 21, 30, 31, 32, 33):
                     with tuner.lock:
                         tuner.command_id = int(data["cmd"])
                         tuner.command_seq = (tuner.command_seq + 1) % 256

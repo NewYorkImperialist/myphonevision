@@ -399,7 +399,7 @@ static float saberDigit(float2 p, int digit, thread float &unlit) {
     return lit;
 }
 
-constexpr sampler panoSampler(filter::linear, s_address::repeat, t_address::clamp_to_edge);
+constexpr sampler panoSampler(filter::linear, mip_filter::linear, max_anisotropy(8), s_address::repeat, t_address::clamp_to_edge);
 
 // ---- Scene props: static 3D objects you can walk around (buffer 3) --------------
 // P[0] (boxes, spheres, capsules, ambient light), P[1] (ground height, ground material
@@ -453,7 +453,11 @@ static float4 saberScene(float3 ro, float3 rd, constant float4 *S, constant floa
     } else {   // 360 panorama: image centre straight ahead of the play area
         float u = fract(0.5 + (atan2(rd.x, -rd.z) - S[15].w) * (0.5 / M_PI_F));
         float v = acos(clamp(rd.y, -1.0, 1.0)) / M_PI_F;
-        col = pano.sample(panoSampler, float2(u, v)).rgb;
+        float2 uv = float2(u, v);
+        float2 dx = dfdx(uv), dy = dfdy(uv);
+        float us = fract(u + 0.5);                          // at the wrap seam, take u's slope from a shifted copy
+        if (abs(dx.x) > 0.25 || abs(dy.x) > 0.25) { dx.x = dfdx(us); dy.x = dfdy(us); }
+        col = pano.sample(panoSampler, uv, gradient2d(dx, dy)).rgb;   // mipmapped: no shimmer
     }
 
     // Floor (neon scene only): dark with a blue grid, fading into the horizon glow.
@@ -725,6 +729,161 @@ static float4 saberScene(float3 ro, float3 rd, constant float4 *S, constant floa
 }
 
 
+// ---- Tightrope over the city ---------------------------------------------------------
+// You stand on a rope strung between two rooftops 200 m above the street, in the play
+// area's frame (rope along -z from the roof edge just behind you to the next roof 16 m
+// ahead; the rope is the floor, y = 0). Towers on a 46 m grid with lit windows at dusk,
+// cars far below, and the whole world sways a little, like the rope does. Real steps
+// move you along the rope.
+constant float TR_PITCH = 46.0;
+constant float TR_HALF = 15.0;
+constant float TR_STREET = -200.0;
+
+static float trTop(int2 cell) {
+    if (cell.x == 0 && (cell.y == 0 || cell.y == -1)) return 0.0;            // the two roofs the rope joins
+    float r = saberHash(float2(cell) * 1.37 + 3.1), r2 = saberHash(float2(cell) * 2.11 + 7.7);
+    return mix(-170.0, 50.0, r * r) + (r2 > 0.88 ? 140.0 : 0.0);             // mostly below you, a few taller
+}
+
+static float3 trSky(float3 rd) {
+    float3 c = mix(float3(0.98, 0.56, 0.32), float3(0.16, 0.20, 0.42), smoothstep(-0.03, 0.4, rd.y));   // dusk
+    c = mix(c, float3(0.03, 0.04, 0.11), smoothstep(0.4, 1.0, rd.y));
+    float3 sun = normalize(float3(-0.85, 0.08, -0.5));
+    float sd = max(dot(rd, sun), 0.0);
+    return c + float3(1.0, 0.62, 0.3) * (pow(sd, 400.0) * 6.0 + pow(sd, 8.0) * 0.35);
+}
+
+static float4 tightropeScene(float3 roW, float3 rdW, constant float4 *S, thread float &distance) {
+    float time = S[6].y;
+    // world -> play-area frame: S[15].w is the facing at the last recenter; the board sits 3.6 m ahead of the start
+    float yaw = S[15].w, c = cos(yaw), s = sin(yaw);
+    float3 right = S[18].xyz;
+    float3 fwd = normalize(cross(float3(0.0, 1.0, 0.0), right));
+    float2 pivot = S[17].xz - fwd.xz * 3.6;
+    float2 pw = roW.xz - pivot;
+    float3 ro = float3(pw.x * c + pw.y * s, roW.y, -pw.x * s + pw.y * c);
+    float3 rd = float3(rdW.x * c + rdW.z * s, rdW.y, -rdW.x * s + rdW.z * c);
+    // the sway: the world rolls about the rope's line, with the odd gust
+    float roll = 0.022 * sin(time * 1.25) + 0.011 * sin(time * 2.9 + 0.7) + 0.03 * pow(max(sin(time * 0.31), 0.0), 12.0) * sin(time * 5.0);
+    float cr = cos(roll), sr = sin(roll);
+    ro.xy = float2(ro.x * cr - ro.y * sr, ro.x * sr + ro.y * cr);
+    rd.xy = float2(rd.x * cr - rd.y * sr, rd.x * sr + rd.y * cr);
+
+    float3 sunDir = normalize(float3(-0.85, 0.08, -0.5));
+    float3 col = trSky(rd);
+    float tHit = 1e4;
+
+    // the rope: two sagging spans, its middle swinging gently sideways
+    float3 ra = float3(0.0, -0.025, 1.6), rb = float3(0.0, -0.025, -15.6);
+    float3 rm = float3(0.22 * sin(time * 1.1), -0.13, -7.0);
+    for (int k = 0; k < 2; k++) {
+        float3 p0 = k == 0 ? ra : rm, p1 = k == 0 ? rm : rb;
+        float tr = saberCapsule(ro, rd, p0, p1, 0.014);
+        if (tr > 0.0 && tr < tHit) {
+            tHit = tr;
+            float3 p = ro + rd * tr;
+            float3 ba = p1 - p0;
+            float y = clamp(dot(p - p0, ba) / dot(ba, ba), 0.0, 1.0);
+            float3 n = normalize(p - (p0 + ba * y));
+            float twist = 0.75 + 0.25 * sin((dot(p, normalize(ba)) * 60.0) + atan2(n.y, n.x) * 3.0);
+            col = float3(0.78, 0.64, 0.42) * twist * (0.45 + 0.55 * max(dot(n, sunDir), 0.0) + 0.25);
+        }
+    }
+
+    // towers: walk the 46 m grid cell by cell along the ray (2D DDA)
+    float2 o = ro.xz, d = rd.xz;
+    int2 cell = int2(floor((o.x + TR_PITCH * 0.5) / TR_PITCH), floor((o.y - 16.0 + TR_PITCH * 0.5) / TR_PITCH));
+    int2 stp = int2(d.x >= 0.0 ? 1 : -1, d.y >= 0.0 ? 1 : -1);
+    float2 inv = float2(abs(d.x) > 1e-6 ? 1.0 / d.x : 1e9, abs(d.y) > 1e-6 ? 1.0 / d.y : 1e9);
+    float2 cmin = float2(float(cell.x) * TR_PITCH - TR_PITCH * 0.5, 16.0 + float(cell.y) * TR_PITCH - TR_PITCH * 0.5);
+    float2 tMax = float2(((d.x >= 0.0 ? cmin.x + TR_PITCH : cmin.x) - o.x) * inv.x,
+                         ((d.y >= 0.0 ? cmin.y + TR_PITCH : cmin.y) - o.y) * inv.y);
+    float2 tDelta = abs(float2(TR_PITCH) * inv);
+    float tEnter = 0.0;
+    int hitKind = 0;              // 1 tower, 2 street
+    int2 hitCell = int2(0);
+    float3 hn = float3(0.0, 1.0, 0.0);
+    float tFound = 1e4;
+    for (int i = 0; i < 72; i++) {
+        float tExit = min(tMax.x, tMax.y);
+        float2 cc = float2(float(cell.x) * TR_PITCH, 16.0 + float(cell.y) * TR_PITCH);
+        float top = trTop(cell);
+        float3 bmin = float3(cc.x - TR_HALF, TR_STREET, cc.y - TR_HALF), bmax = float3(cc.x + TR_HALF, top, cc.y + TR_HALF);
+        float3 t1 = (bmin - ro) * float3(inv.x, abs(rd.y) > 1e-6 ? 1.0 / rd.y : 1e9, inv.y);
+        float3 t2 = (bmax - ro) * float3(inv.x, abs(rd.y) > 1e-6 ? 1.0 / rd.y : 1e9, inv.y);
+        float3 tn = min(t1, t2), tf = max(t1, t2);
+        float tb0 = max(max(tn.x, tn.y), tn.z), tb1 = min(min(tf.x, tf.y), tf.z);
+        if (tb0 < tb1 && tb1 > 0.0) {
+            float th = max(tb0, 0.0);
+            if (th < tFound) {
+                tFound = th; hitKind = 1; hitCell = cell;
+                if (tb0 == tn.x) hn = float3(-sign(rd.x), 0.0, 0.0);
+                else if (tb0 == tn.y) hn = float3(0.0, -sign(rd.y), 0.0);
+                else hn = float3(0.0, 0.0, -sign(rd.z));
+                break;
+            }
+        }
+        if (rd.y < 0.0) {                                     // the street in this cell
+            float tg = (TR_STREET - ro.y) / rd.y;
+            if (tg >= tEnter && tg <= tExit) { tFound = tg; hitKind = 2; hitCell = cell; break; }
+        }
+        tEnter = tExit;
+        if (tEnter > 3000.0) break;
+        if (tMax.x < tMax.y) { tMax.x += tDelta.x; cell.x += stp.x; } else { tMax.y += tDelta.y; cell.y += stp.y; }
+    }
+    if (hitKind > 0 && tFound < tHit) {
+        tHit = tFound;
+        float3 p = ro + rd * tFound;
+        float3 lit;
+        if (hitKind == 1 && hn.y > 0.5) {                    // a roof
+            float g = saberNoise(p.xz * 0.7) * 0.5 + 0.5;
+            lit = float3(0.20, 0.19, 0.18) * g * (0.45 + 0.55 * max(dot(hn, sunDir), 0.0) + 0.3);
+        } else if (hitKind == 1) {                           // a facade with windows
+            float u = abs(hn.x) > 0.5 ? p.z : p.x;
+            float2 g = float2(u / 1.8, p.y / 3.8);
+            float2 f = fract(g);
+            float win = step(0.14, f.x) * step(f.x, 0.86) * step(0.3, f.y) * step(f.y, 0.9);
+            float seed = saberHash(float2(hitCell) + 0.5);
+            float h = saberHash(floor(g) + float2(hitCell) * 17.0);
+            float lights = step(0.68 - 0.18 * seed, h);                       // a quarter to a half of the windows are lit
+            bool glass = seed > 0.45;
+            float3 wall = glass ? float3(0.07, 0.09, 0.13) : mix(float3(0.24, 0.22, 0.2), float3(0.42, 0.38, 0.33), saberHash(float2(hitCell) + 9.0));
+            float3 refl = trSky(reflect(rd, hn));
+            float3 pane = float3(0.025, 0.03, 0.045) + refl * (glass ? 0.45 : 0.25);   // dark glass reflecting the dusk
+            float3 lamp = mix(float3(1.0, 0.74, 0.42), float3(0.85, 0.9, 1.0), step(0.8, fract(h * 7.3))) * (0.55 + 0.6 * fract(h * 13.1));
+            lamp *= 0.7 + 0.3 * smoothstep(0.3, 0.9, f.y);                          // a bit of depth inside the room
+            float3 detail = mix(wall + refl * (glass ? 0.25 : 0.06), lights > 0.5 ? lamp : pane, win);
+            float litShare = 0.32 + 0.18 * seed;
+            float3 average = mix(wall + refl * 0.15, mix(pane, float3(0.8, 0.62, 0.38), litShare), 0.52);
+            float aa = clamp(1.0 - max(fwidth(g.x), fwidth(g.y)) * 1.6, 0.0, 1.0);   // far windows blend, no shimmer
+            lit = mix(average, detail, aa) * (0.8 + 0.3 * max(dot(hn, sunDir), 0.0));
+        } else {                                             // the street: asphalt, lane lines, moving cars
+            float2 cc = float2(float(hitCell.x) * TR_PITCH, 16.0 + float(hitCell.y) * TR_PITCH);
+            float2 q = p.xz - cc;
+            lit = float3(0.05, 0.05, 0.06);
+            float carsX = 0.0, carsZ = 0.0;
+            if (abs(q.y) > TR_HALF) {                        // a street running along x
+                float lane = sign(q.y) * (abs(q.y) - TR_HALF - 8.0);
+                float dir = lane > 0.0 ? 1.0 : -1.0;
+                carsX = step(0.86, fract((p.x * dir + time * 13.0) / 9.0 + saberHash(float2(floor(p.x / 9.0), lane)))) * step(abs(abs(lane) - 3.0), 1.2);
+                lit += (dir > 0.0 ? float3(1.0, 0.9, 0.7) : float3(1.0, 0.15, 0.1)) * carsX * 1.6;
+            }
+            if (abs(q.x) > TR_HALF) {                        // a street running along z
+                float lane = sign(q.x) * (abs(q.x) - TR_HALF - 8.0);
+                float dir = lane > 0.0 ? 1.0 : -1.0;
+                carsZ = step(0.86, fract((p.z * dir + time * 11.0) / 9.0 + saberHash(float2(lane, floor(p.z / 9.0))))) * step(abs(abs(lane) - 3.0), 1.2);
+                lit += (dir > 0.0 ? float3(1.0, 0.9, 0.7) : float3(1.0, 0.15, 0.1)) * carsZ * 1.6;
+            }
+            float fw = max(fwidth(p.x), fwidth(p.z));
+            lit = mix(lit, float3(0.12, 0.09, 0.08), clamp(fw / 3.0, 0.0, 1.0));   // too far to see single cars: a warm glow
+        }
+        float haze = 1.0 - exp(-tFound * 0.0016);
+        col = mix(lit, trSky(normalize(float3(rd.x, max(rd.y, -0.02), rd.z))) * 0.85, haze);
+    }
+    distance = tHit;
+    return float4(col, 1.0);
+}
+
 // ---- Jumpscare: an original animatronic face lunging at you (or a custom image) -------
 // Head-locked, drawn over the scene for 1.6 s after the admin page's Jumpscare button.
 // q: this pixel's view tangent; js: seconds since it started.
@@ -797,7 +956,8 @@ fragment TestEyesOut vrSaberEyes(TextureMappingVertex in [[ stage_in ]],
     float3 rd = normalize((u.headToWorld * float4(normalize(float3(tanAngle, -1.0)), 0.0)).xyz);
     TestEyesOut out;
     float distance;
-    float4 c = saberScene(ro, rd, scene, props, pano, earth, distance);
+    float4 c = (scene[18].w > 5.5 && scene[18].w < 6.5) ? tightropeScene(ro, rd, scene, distance)   // scene 6: tightrope
+                                                       : saberScene(ro, rd, scene, props, pano, earth, distance);
     float js = scene[16].w;                                              // seconds into a jumpscare, or < 0
     if (js >= 0.0 && js < 1.6) { c = float4(jumpscare(tanAngle, eye == 0 ? -1.0 : 1.0, js, scene[2].w > 0.5, scene[3].w > 0.5, scare), 1.0); distance = 0.3; }
     out.color = half4(c);
